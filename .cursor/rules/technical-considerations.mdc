@@ -1,0 +1,79 @@
+
+# Technical Considerations: Calendar Sync Service
+
+This document outlines the key technical considerations and implementation details for the calendar synchronization service.
+
+## Authentication Strategy
+
+* **OAuth2 User Authentication**: Primary authentication method using OAuth2 user credentials with refresh tokens for automated operation.
+* **No Service Accounts Needed**: Avoid the complexity of creating Google Cloud projects and service accounts for single-user scenarios.
+* **Credential Management**: Secure storage of OAuth2 refresh tokens with proper file permissions.
+
+## Sync Metadata & Event Matching
+
+* **Unique Identifiers**: Embed source event ID plus sync timestamp hash in destination event description for reliable matching.
+* **Update/Delete Tracking**: Maintain mapping between source and destination events to handle modifications and deletions.
+* **Conflict Resolution**: Strategy for handling manual modifications to synced events on destination calendars.
+
+## Error Handling & Resilience
+
+* **Retry Logic**: Implement exponential backoff for transient API failures.
+* **Logging**: Comprehensive logging of sync operations, errors, and performance metrics.
+* **Graceful Degradation**: Continue processing other calendar pairs if one fails.
+
+## Rate Limiting & API Quotas
+
+* **Quota Management**: Respect Google Calendar API rate limits and quotas.
+* **Batch Operations**: Group API calls where possible to minimize quota consumption.
+* **Throttling**: Implement intelligent delays between operations to stay within limits.
+
+## Configuration Validation
+
+* **Startup Validation**: Verify all configuration parameters, credentials, and calendar access at startup.
+* **Schema Validation**: Validate YAML configuration structure and required fields.
+* **Runtime Checks**: Periodic validation of calendar access and permissions during operation.
+
+## When Service Accounts Make Sense
+
+* **Business/Enterprise Accounts**: Only consider service accounts if you already have access to an existing Google Cloud project.
+* **Multi-User Scenarios**: Service accounts become valuable when multiple users need access to the same calendars.
+* **Existing Infrastructure**: Leverage service accounts only if they're already part of your existing Google Workspace setup.
+
+## OAuth2 Implementation Details
+
+* **Initial Authentication Flow**: One-time manual authentication per Google account to obtain refresh tokens.
+* **Refresh Token Storage**: Store OAuth2 refresh tokens securely to avoid requiring manual re-authentication.
+* **Token Refresh Logic**: Automatically refresh OAuth2 tokens before they expire to maintain continuous operation.
+* **Hybrid Configuration**: Support multiple Google accounts, each with their own OAuth2 credentials.
+
+## Headless/Homelab Authentication Challenges
+
+* **No Browser Access**: Homelab environments often lack GUI/browser access for OAuth2 flows.
+* **Command-Line Authentication**: Implement OAuth2 authentication flow that works entirely from command line.
+* **Device Flow Alternative**: Use OAuth2 device authorization flow where user authenticates on another device (phone/laptop).
+* **QR Code Generation**: Generate QR codes containing the authorization URL for easy mobile phone scanning.
+* **Manual Token Generation**: Option to manually generate refresh tokens on a device with browser access and transfer them to the homelab.
+* **Secure Token Transfer**: Secure methods for transferring OAuth2 credentials to headless environments (encrypted files, environment variables).
+
+## QR Code Authentication Implementation
+
+* **QR Code Libraries**: Use `qrcode` Python library to generate QR codes containing authorization URLs.
+* **Terminal Display**: Display QR code directly in terminal using ASCII art or library support for terminal QR rendering.
+* **Mobile-Friendly URLs**: Ensure authorization URLs are mobile-optimized and easy to scan.
+* **User Experience Flow**: 
+  - Script displays QR code in terminal
+  - User scans with mobile phone
+  - User completes authentication on mobile
+  - Script automatically receives refresh token
+* **Fallback Display**: If terminal can't render QR codes, fall back to displaying the URL and user code for manual entry.
+
+## Project Setup & Dependency Management
+
+* **uv Package Manager**: Use `uv` for fast Python package management and virtual environment handling.
+* **pyproject.toml**: Define project metadata, dependencies, and build configuration in a single `pyproject.toml` file.
+* **Local Development**: Use `uv venv` to create isolated virtual environments for local testing and development.
+* **Dependency Specification**: Use `uv add` to manage dependencies with precise version pinning.
+* **Virtual Environment**: `uv` automatically creates and manages virtual environments for isolated development.
+* **Lock File**: Generate `uv.lock` for reproducible dependency resolution across different environments.
+* **Development Dependencies**: Separate production and development dependencies (e.g., testing, linting tools).
+* **Build & Distribution**: Configure build system and entry points in `pyproject.toml` for easy installation and execution.
