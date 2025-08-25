@@ -1,0 +1,35 @@
+# Calsinki Configuration Example
+# Copy this file to config.yaml and customize for your setup
+
+# Google Calendar accounts
+accounts:
+  - name: "work"
+    email: "work@company.com"
+    calendar_id: "work@company.com"
+    auth_type: "oauth2"
+    is_source: true
+    is_destination: false
+  
+  - name: "personal"
+    email: "personal@gmail.com"
+    calendar_id: "personal@gmail.com"
+    auth_type: "oauth2"
+    is_source: false
+    is_destination: true
+
+# Calendar synchronization pairs
+sync_pairs:
+  - source_account: "work"
+    source_calendar: "work@company.com"
+    destination_account: "personal"
+    destination_calendar: "personal@gmail.com"
+    privacy_mode: "private"  # Strip sensitive details
+    sync_interval_minutes: 15
+    enabled: true
+
+# Logging configuration
+log_level: "INFO"
+log_file: "./logs/calsinki.log"
+
+# Data directory for storing sync metadata
+data_dir: "./data"
