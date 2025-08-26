@@ -47,6 +47,16 @@ Examples:
         "sync", 
         help="Synchronize calendars"
     )
+    sync_parser.add_argument(
+        "pairs",
+        nargs="*",
+        help="Specific sync pair IDs to sync (default: all enabled pairs)"
+    )
+    sync_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List available sync pairs instead of syncing"
+    )
     
     # Auth command
     auth_parser = subparsers.add_parser(
@@ -73,8 +83,7 @@ Examples:
     
     # Handle commands
     if args.command == "sync":
-        print("🔄 Calendar synchronization not yet implemented")
-        return 0
+        return handle_sync_command(args)
     elif args.command == "auth":
         print("🔐 Authentication not yet implemented")
         return 0
@@ -100,13 +109,25 @@ def handle_config_command(args) -> int:
         
         print(f"📊 Accounts ({len(config.accounts)}):")
         for account in config.accounts:
-            role = "source" if account.is_source else "destination" if account.is_destination else "none"
-            print(f"  • {account.name} ({account.email}) - {role}")
+            print(f"  • {account.name} ({account.email}) - {account.auth_type}")
+        
+        print(f"\n📅 Calendars ({len(config.calendars)}):")
+        for calendar in config.calendars:
+            desc = f" - {calendar.description}" if calendar.description else ""
+            print(f"  • {calendar.name} ({calendar.calendar_id}) in account '{calendar.account_name}'{desc}")
         
         print(f"\n🔄 Sync Pairs ({len(config.sync_pairs)}):")
         for pair in config.sync_pairs:
             status = "✅ enabled" if pair.enabled else "❌ disabled"
-            print(f"  • {pair.source_account} → {pair.destination_account} ({pair.privacy_mode}) - {status}")
+            source_cal = config.get_calendar_by_id(pair.source_calendar)
+            dest_cal = config.get_calendar_by_id(pair.destination_calendar)
+            
+            if source_cal and dest_cal:
+                print(f"  • [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode}) - {status}")
+                print(f"    └─ {source_cal.account_name}:{pair.source_calendar} → {dest_cal.account_name}:{pair.destination_calendar}")
+            else:
+                print(f"  • [{pair.id}] {pair.source_calendar} → {pair.destination_calendar} ({pair.privacy_mode}) - {status}")
+                print(f"    └─ [Calendar details not found]")
         
         print(f"\n📁 Data Directory: {config.data_dir}")
         print(f"📝 Log Level: {config.log_level}")
@@ -130,6 +151,75 @@ def handle_config_command(args) -> int:
         return 1
     except Exception as e:
         print(f"❌ Error loading configuration: {e}")
+        return 1
+
+
+def handle_sync_command(args) -> int:
+    """Handle the sync command."""
+    try:
+        config = Config.from_file(args.config)
+        
+        if args.list:
+            print("🔄 Available Sync Pairs:")
+            print("=" * 50)
+            for pair in config.sync_pairs:
+                status = "✅ enabled" if pair.enabled else "❌ disabled"
+                source_cal = config.get_calendar_by_id(pair.source_calendar)
+                dest_cal = config.get_calendar_by_id(pair.destination_calendar)
+                
+                if source_cal and dest_cal:
+                    print(f"  [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode}) - {status}")
+                else:
+                    print(f"  [{pair.id}] {pair.source_calendar} → {pair.destination_calendar} ({pair.privacy_mode}) - {status}")
+            return 0
+        
+        # Determine which pairs to sync
+        if args.pairs:
+            # Sync specific pairs by ID
+            pairs_to_sync = []
+            for pair_id in args.pairs:
+                pair = next((p for p in config.sync_pairs if p.id == pair_id), None)
+                if pair:
+                    if pair.enabled:
+                        pairs_to_sync.append(pair)
+                    else:
+                        print(f"⚠️  Sync pair '{pair_id}' is disabled, skipping")
+                else:
+                    print(f"❌ Sync pair '{pair_id}' not found")
+                    return 1
+            
+            if not pairs_to_sync:
+                print("❌ No valid sync pairs to process")
+                return 1
+                
+            print(f"🔄 Syncing {len(pairs_to_sync)} specific pair(s): {', '.join(p.id for p in pairs_to_sync)}")
+        else:
+            # Sync all enabled pairs
+            pairs_to_sync = [p for p in config.sync_pairs if p.enabled]
+            if not pairs_to_sync:
+                print("❌ No enabled sync pairs found")
+                return 1
+                
+            print(f"🔄 Syncing all {len(pairs_to_sync)} enabled pair(s)")
+        
+        # TODO: Implement actual sync logic
+        for pair in pairs_to_sync:
+            source_cal = config.get_calendar_by_id(pair.source_calendar)
+            dest_cal = config.get_calendar_by_id(pair.destination_calendar)
+            
+            if source_cal and dest_cal:
+                print(f"  🔄 [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
+                print(f"     └─ Sync logic not yet implemented")
+            else:
+                print(f"  ❌ [{pair.id}] Calendar details not found")
+        
+        return 0
+        
+    except FileNotFoundError:
+        print(f"❌ Configuration file not found: {args.config}")
+        return 1
+    except Exception as e:
+        print(f"❌ Error during sync: {e}")
         return 1
 
 

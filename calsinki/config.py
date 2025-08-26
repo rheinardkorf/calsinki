@@ -12,23 +12,28 @@ class CalendarAccount:
     
     name: str
     email: str
-    calendar_id: str
     auth_type: str = "oauth2"  # "oauth2" or "service_account"
     credentials_file: Optional[str] = None
-    is_source: bool = False
-    is_destination: bool = False
+
+
+@dataclass
+class Calendar:
+    """Configuration for a specific calendar within an account."""
+    
+    account_name: str  # Reference to the account
+    calendar_id: str   # Google Calendar ID (can be email, calendar ID, or resource ID)
+    name: str          # Human-readable name for this calendar
+    description: Optional[str] = None  # Optional description of the calendar
 
 
 @dataclass
 class SyncPair:
     """Configuration for a source-destination calendar sync pair."""
     
-    source_account: str  # Account name
-    source_calendar: str  # Calendar ID
-    destination_account: str  # Account name
-    destination_calendar: str  # Calendar ID
+    id: str                    # Unique identifier for this sync pair
+    source_calendar: str       # Calendar ID (not name)
+    destination_calendar: str  # Calendar ID (not name)
     privacy_mode: str = "preserve"  # "preserve" or "private"
-    sync_interval_minutes: int = 15
     enabled: bool = True
 
 
@@ -37,6 +42,7 @@ class Config:
     """Main configuration for Calsinki."""
     
     accounts: List[CalendarAccount] = field(default_factory=list)
+    calendars: List[Calendar] = field(default_factory=list)
     sync_pairs: List[SyncPair] = field(default_factory=list)
     log_level: str = "INFO"
     log_file: Optional[str] = None
@@ -63,6 +69,12 @@ class Config:
             for account_data in data['accounts']:
                 account = CalendarAccount(**account_data)
                 config.accounts.append(account)
+        
+        # Load calendars
+        if 'calendars' in data:
+            for calendar_data in data['calendars']:
+                calendar = Calendar(**calendar_data)
+                config.calendars.append(calendar)
         
         # Load sync pairs
         if 'sync_pairs' in data:
@@ -91,24 +103,30 @@ class Config:
                 errors.append("Account must have a name")
             if not account.email:
                 errors.append(f"Account '{account.name}' must have an email")
-            if not account.calendar_id:
-                errors.append(f"Account '{account.name}' must have a calendar ID")
+        
+        # Validate calendars
+        calendar_ids = set()
+        for calendar in self.calendars:
+            if not calendar.account_name:
+                errors.append(f"Calendar '{calendar.name}' must reference an account")
+            elif calendar.account_name not in account_names:
+                errors.append(f"Calendar '{calendar.name}' references unknown account: {calendar.account_name}")
+            else:
+                calendar_ids.add(calendar.calendar_id)
         
         # Validate sync pairs
         for pair in self.sync_pairs:
-            if pair.source_account not in account_names:
-                errors.append(f"Sync pair references unknown source account: {pair.source_account}")
-            if pair.destination_account not in account_names:
-                errors.append(f"Sync pair references unknown destination account: {pair.destination_account}")
+            # Check that source calendar exists
+            if pair.source_calendar not in calendar_ids:
+                errors.append(f"Sync pair references unknown source calendar ID: {pair.source_calendar}")
             
-            # Check that accounts are properly configured for their roles
-            source_acc = next((acc for acc in self.accounts if acc.name == pair.source_account), None)
-            dest_acc = next((acc for acc in self.accounts if acc.name == pair.destination_account), None)
+            # Check that destination calendar exists
+            if pair.destination_calendar not in calendar_ids:
+                errors.append(f"Sync pair references unknown destination calendar ID: {pair.destination_calendar}")
             
-            if source_acc and not source_acc.is_source:
-                errors.append(f"Account '{pair.source_account}' is not configured as a source")
-            if dest_acc and not dest_acc.is_destination:
-                errors.append(f"Account '{pair.destination_account}' is not configured as a destination")
+            # Check that source and destination are different
+            if pair.source_calendar == pair.destination_calendar:
+                errors.append(f"Sync pair cannot sync calendar to itself: {pair.source_calendar}")
         
         return errors
     
@@ -119,43 +137,76 @@ class Config:
                 return account
         return None
     
-    def get_source_accounts(self) -> List[CalendarAccount]:
-        """Get all accounts configured as sources."""
-        return [acc for acc in self.accounts if acc.is_source]
+    def get_calendar(self, account_name: str, calendar_id: str) -> Optional[Calendar]:
+        """Get calendar by account name and calendar ID."""
+        for calendar in self.calendars:
+            if calendar.account_name == account_name and calendar.calendar_id == calendar_id:
+                return calendar
+        return None
     
-    def get_destination_accounts(self) -> List[CalendarAccount]:
-        """Get all accounts configured as destinations."""
-        return [acc for acc in self.accounts if acc.is_destination]
+    def get_calendar_by_name(self, calendar_name: str) -> Optional[Calendar]:
+        """Get calendar by its human-readable name."""
+        for calendar in self.calendars:
+            if calendar.name == calendar_name:
+                return calendar
+        return None
+    
+    def get_calendar_by_id(self, calendar_id: str) -> Optional[Calendar]:
+        """Get calendar by its calendar ID."""
+        for calendar in self.calendars:
+            if calendar.calendar_id == calendar_id:
+                return calendar
+        return None
+    
+    def get_calendars_for_account(self, account_name: str) -> List[Calendar]:
+        """Get all calendars for a specific account."""
+        return [cal for cal in self.calendars if cal.account_name == account_name]
 
 
 def create_example_config() -> str:
     """Create an example configuration file."""
     return """# Calsinki Configuration Example
 
-# Google Calendar accounts
+# Google Calendar accounts (authentication)
 accounts:
   - name: "work"
     email: "work@company.com"
-    calendar_id: "work@company.com"
     auth_type: "oauth2"
-    is_source: true
-    is_destination: false
   
   - name: "personal"
     email: "personal@gmail.com"
-    calendar_id: "personal@gmail.com"
     auth_type: "oauth2"
-    is_source: false
-    is_destination: true
+
+# Available calendars within each account
+calendars:
+  - account_name: "work"
+    calendar_id: "work@company.com"
+    name: "Work Calendar"
+  
+  - account_name: "work"
+    calendar_id: "team@company.com"
+    name: "Team Calendar"
+  
+  - account_name: "personal"
+    calendar_id: "personal@gmail.com"
+    name: "Personal Calendar"
+  
+  - account_name: "personal"
+    calendar_id: "family@gmail.com"
+    name: "Family Calendar"
 
 # Calendar synchronization pairs
 sync_pairs:
-  - source_account: "work"
+  - id: "work_to_personal"
     source_calendar: "work@company.com"
-    destination_account: "personal"
     destination_calendar: "personal@gmail.com"
     privacy_mode: "private"  # Strip sensitive details
-    sync_interval_minutes: 15
+    enabled: true
+  
+  - id: "team_to_family"
+    source_calendar: "team@company.com"
+    destination_calendar: "family@gmail.com"
+    privacy_mode: "preserve"  # Keep all details
     enabled: true
 
 # Logging configuration
