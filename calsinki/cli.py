@@ -7,6 +7,8 @@ from pathlib import Path
 
 from calsinki import __version__
 from calsinki.config import Config, create_example_config, get_default_config_path, ensure_directories, get_credentials_dir, get_config_dir
+from calsinki.auth import create_oauth2_config_file, load_oauth2_config, GoogleAuthenticator
+from calsinki.sync import CalendarSynchronizer
 
 
 def main():
@@ -17,8 +19,11 @@ def main():
         epilog="""
 Examples:
   calsinki init                    # Initialize configuration structure
+  calsinki auth --setup            # Set up OAuth2 configuration
+  calsinki auth                    # Authenticate all accounts
+  calsinki auth personal           # Authenticate specific account
+  calsinki auth xteam personal     # Authenticate multiple specific accounts
   calsinki sync                    # Run calendar synchronization
-  calsinki auth                    # Authenticate with Google accounts
   calsinki config                  # Show current configuration
   calsinki config --example        # Show example configuration
   calsinki --version              # Show version information
@@ -64,6 +69,16 @@ Examples:
         "auth", 
         help="Authenticate with Google accounts"
     )
+    auth_parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Set up OAuth2 configuration (create config file)"
+    )
+    auth_parser.add_argument(
+        "accounts",
+        nargs="*",
+        help="Specific account names to authenticate (default: all accounts)"
+    )
     
     # Config command
     config_parser = subparsers.add_parser(
@@ -97,8 +112,7 @@ Examples:
     if args.command == "sync":
         return handle_sync_command(args)
     elif args.command == "auth":
-        print("🔐 Authentication not yet implemented")
-        return 0
+        return handle_auth_command(args)
     elif args.command == "config":
         return handle_config_command(args)
     elif args.command == "init":
@@ -216,17 +230,31 @@ def handle_sync_command(args) -> int:
                 
             print(f"🔄 Syncing all {len(pairs_to_sync)} enabled pair(s)")
         
-        # TODO: Implement actual sync logic
+        # Perform actual synchronization
+        print("🚀 Starting calendar synchronization...")
+        
+        # Initialize the synchronizer
+        synchronizer = CalendarSynchronizer(config)
+        
+        # Sync each pair
         for pair in pairs_to_sync:
             source_cal = config.get_calendar_by_id(pair.source_calendar)
             dest_cal = config.get_calendar_by_id(pair.destination_calendar)
             
             if source_cal and dest_cal:
-                print(f"  🔄 [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
-                print(f"     └─ Sync logic not yet implemented")
+                print(f"\n🔄 Syncing [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
+                
+                # Perform the sync
+                success = synchronizer.sync_pair(pair)
+                
+                if success:
+                    print(f"  ✅ Sync completed successfully")
+                else:
+                    print(f"  ❌ Sync failed")
             else:
                 print(f"  ❌ [{pair.id}] Calendar details not found")
         
+        print(f"\n🎉 Synchronization complete!")
         return 0
         
     except FileNotFoundError:
@@ -234,6 +262,82 @@ def handle_sync_command(args) -> int:
         return 1
     except Exception as e:
         print(f"❌ Error during sync: {e}")
+        return 1
+
+
+def handle_auth_command(args) -> int:
+    """Handle the auth command."""
+    try:
+        if args.setup:
+            # Create OAuth2 config file
+            print("🔧 Setting up OAuth2 configuration...")
+            oauth2_config_path = create_oauth2_config_file()
+            print(f"✅ OAuth2 config file created at: {oauth2_config_path}")
+            print("\n💡 Next steps:")
+            print("   1. Go to Google Cloud Console: https://console.cloud.google.com/")
+            print("   2. Create a new project or select existing one")
+            print("   3. Enable Google Calendar API")
+            print("   4. Create OAuth 2.0 credentials")
+            print("   5. Edit the config file with your client_id and client_secret")
+            print("   6. Run 'calsinki auth' to authenticate")
+            return 0
+        
+        # Load OAuth2 configuration
+        oauth2_config = load_oauth2_config()
+        if not oauth2_config:
+            print("❌ OAuth2 configuration not found")
+            print("💡 Run 'calsinki auth --setup' to create the configuration file")
+            return 1
+        
+        # Load main configuration to get accounts
+        config = Config.from_file(args.config)
+        
+        # Determine which accounts to authenticate
+        if args.accounts:
+            # Authenticate specific accounts
+            accounts_to_auth = []
+            for account_name in args.accounts:
+                account = next((acc for acc in config.accounts if acc.name == account_name), None)
+                if account:
+                    if account.auth_type == "oauth2":
+                        accounts_to_auth.append(account)
+                    else:
+                        print(f"⚠️  Skipping {account_name} - auth_type '{account.auth_type}' not supported")
+                else:
+                    print(f"❌ Account '{account_name}' not found in configuration")
+                    return 1
+            
+            if not accounts_to_auth:
+                print("❌ No valid accounts to authenticate")
+                return 1
+                
+            print(f"🔐 Authenticating {len(accounts_to_auth)} specific account(s): {', '.join(acc.name for acc in accounts_to_auth)}")
+        else:
+            # Authenticate all OAuth2 accounts
+            accounts_to_auth = [acc for acc in config.accounts if acc.auth_type == "oauth2"]
+            if not accounts_to_auth:
+                print("❌ No OAuth2 accounts found in configuration")
+                return 1
+                
+            print(f"🔐 Authenticating all {len(accounts_to_auth)} OAuth2 account(s)")
+        
+        # Authenticate selected accounts
+        for account in accounts_to_auth:
+            print(f"\n🔐 Authenticating account: {account.name} ({account.email})")
+            try:
+                authenticator = GoogleAuthenticator(account.name, oauth2_config)
+                credentials = authenticator.authenticate()
+                print(f"✅ Successfully authenticated {account.name}")
+            except Exception as e:
+                print(f"❌ Failed to authenticate {account.name}: {e}")
+                return 1
+        
+        print(f"\n🎉 All accounts authenticated successfully!")
+        print("💡 You can now run 'calsinki sync' to start synchronization")
+        return 0
+        
+    except Exception as e:
+        print(f"❌ Error during authentication: {e}")
         return 1
 
 

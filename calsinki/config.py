@@ -35,7 +35,9 @@ class SyncPair:
     id: str                    # Unique identifier for this sync pair
     source_calendar: str       # Calendar ID (not name)
     destination_calendar: str  # Calendar ID (not name)
-    privacy_mode: str = "preserve"  # "preserve" or "private"
+    privacy_mode: str = "public"  # "public" or "private" - aligns with Google Calendar visibility
+    privacy_label: str = "Busy"   # Custom label for private mode (defaults to "Busy")
+    show_time: bool = False       # Whether to show time in privacy labels (defaults to false)
     enabled: bool = True
 
 

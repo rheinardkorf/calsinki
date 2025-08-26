@@ -21,6 +21,8 @@ wheels/
 *.egg
 MANIFEST
 
+NEXT_STEPS.md
+
 # Virtual environments
 .env
 .venv
