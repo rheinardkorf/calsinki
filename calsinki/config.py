@@ -51,6 +51,7 @@ class Config:
     log_level: str = "INFO"
     log_file: Optional[str] = None
     data_dir: str = "./data"
+    default_identifier: str = "calsinki"  # Default identifier for all sync operations
     
     @classmethod
     def from_file(cls, config_path: Path) -> "Config":
@@ -93,8 +94,22 @@ class Config:
             config.log_file = data['log_file']
         if 'data_dir' in data:
             config.data_dir = data['data_dir']
+        if 'default_identifier' in data:
+            config.default_identifier = data['default_identifier']
         
         return config
+    
+    def get_effective_identifier(self, sync_pair: SyncPair) -> str:
+        """
+        Get the effective identifier for a sync pair by combining:
+        default_identifier + sync_pair.id + "_synced"
+        
+        Examples:
+        - default_identifier: "mybrand", sync_pair.id: "demo_sync" → "mybrand_demo_sync_synced"
+        - default_identifier: "calsinki", sync_pair.id: "work_to_personal" → "calsinki_work_to_personal_synced"
+        """
+        default_id = getattr(self, 'default_identifier', 'calsinki') or 'calsinki'
+        return f"{default_id}_{sync_pair.id}_synced"
     
     def validate(self) -> List[str]:
         """Validate configuration and return list of errors."""

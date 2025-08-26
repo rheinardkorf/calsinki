@@ -162,8 +162,9 @@ class CalendarSynchronizer:
             self.logger.info(f"📅 Found {len(source_events)} events in source calendar")
             
             # Fetch existing synced events from destination calendar
-            # Search specifically for events with Calsinki footer from this source calendar
-            existing_synced_events = self._find_synced_events_by_search(dest_service, dest_cal.calendar_id, source_cal.calendar_id)
+            # Search specifically for events with the configurable identifier from this source calendar
+            effective_identifier = self.config.get_effective_identifier(sync_pair)
+            existing_synced_events = self._find_synced_events_by_search(dest_service, dest_cal.calendar_id, source_cal.calendar_id, effective_identifier)
             
             print(f"🔍 Found {len(existing_synced_events)} existing synced events in destination calendar")
             self.logger.info(f"📅 Found {len(existing_synced_events)} existing synced events in destination calendar")
@@ -262,7 +263,11 @@ class CalendarSynchronizer:
                 # Apply privacy rules
                 source_cal = self.config.get_calendar_by_id(event.sync_metadata['source_calendar_id'])
                 source_cal_name = source_cal.name if source_cal else "Unknown Calendar"
-                synced_event = self._apply_privacy_rules(event, effective_privacy_mode, source_cal_name, privacy_label, sync_pair.show_time)
+                
+                # Get the effective identifier for this sync pair
+                effective_identifier = self.config.get_effective_identifier(sync_pair)
+                
+                synced_event = self._apply_privacy_rules(event, effective_privacy_mode, source_cal_name, privacy_label, sync_pair.show_time, effective_identifier)
                 
                 # Check if event already exists in destination
                 existing_event = self._find_existing_event(dest_service, dest_calendar_id, event)
@@ -283,7 +288,7 @@ class CalendarSynchronizer:
         
         return synced_count
     
-    def _apply_privacy_rules(self, event: CalendarEvent, privacy_mode: str, source_calendar_name: str = None, privacy_label: str = "Busy", show_time: bool = False) -> Dict[str, Any]:
+    def _apply_privacy_rules(self, event: CalendarEvent, privacy_mode: str, source_calendar_name: str = None, privacy_label: str = "Busy", show_time: bool = False, identifier: str = "calsinki") -> Dict[str, Any]:
         """Apply privacy rules to an event."""
         # Format dates properly for Google Calendar API
         start_data = {}
@@ -299,13 +304,22 @@ class CalendarSynchronizer:
             end_data = {'dateTime': event.end.isoformat()}
         
         # Create Calsinki footer
-        calsinki_footer = f"\n\n---\nEvent added by Calsinki from {source_calendar_name or 'Unknown'} calendar."
+        calsinki_footer = f"\n\n---\nEvent added by {identifier.title()} from {source_calendar_name or 'Unknown'} calendar."
         
         # Create summary with or without time
         if show_time:
             summary = f"{privacy_label} - {event.start.strftime('%H:%M')}"
         else:
             summary = privacy_label
+        
+        # Create extended properties with both identifier types
+        extended_properties = {
+            'private': {
+                **event.sync_metadata,
+                f"{identifier.split('_')[0]}_synced": 'true',  # Instance-level: "calsinki_synced=true"
+                identifier: 'true'  # Sync pair-level: "calsinki_demo_to_personal_synced=true"
+            }
+        }
         
         if privacy_mode == "public":
             # Keep original event details
@@ -318,9 +332,7 @@ class CalendarSynchronizer:
                 'end': end_data,
                 'location': event.location,
                 'attendees': event.attendees,
-                'extendedProperties': {
-                    'private': event.sync_metadata
-                }
+                'extendedProperties': extended_properties
             }
         elif privacy_mode == "private":
             # Remove ALL identifiable details - completely anonymous
@@ -331,14 +343,12 @@ class CalendarSynchronizer:
                 'description': description,
                 'start': start_data,
                 'end': end_data,
-                'extendedProperties': {
-                    'private': event.sync_metadata
-                }
+                'extendedProperties': extended_properties
             }
         else:
             # Default to public for unknown modes
             self.logger.warning(f"⚠️  Unknown privacy mode '{privacy_mode}', defaulting to 'public'")
-            return self._apply_privacy_rules(event, "public", source_calendar_name, privacy_label, show_time)
+            return self._apply_privacy_rules(event, "public", source_calendar_name, privacy_label, show_time, identifier)
     
     def _find_existing_event(self, service: Any, calendar_id: str, source_event: CalendarEvent) -> Optional[Dict[str, Any]]:
         """Find existing event in destination calendar by checking sync metadata."""
@@ -548,23 +558,23 @@ class CalendarSynchronizer:
         self.logger.info(f"🗑️  Deletion check complete: {deleted_count} events identified for deletion")
         return deleted_count
 
-    def _find_synced_events_by_search(self, service: Any, calendar_id: str, source_calendar_id: str) -> List[CalendarEvent]:
-        """Find synced events by searching for Calsinki footer and filtering by source_calendar_id."""
+    def _find_synced_events_by_search(self, service: Any, calendar_id: str, source_calendar_id: str, identifier: str = "calsinki") -> List[CalendarEvent]:
+        """Find synced events by searching for the generated identifier and filtering by source_calendar_id."""
         try:
             self.logger.info(f"🔍 Searching for events synced from calendar {source_calendar_id} in calendar {calendar_id}")
             
-            # Search for events containing the Calsinki footer (this approach works)
-            search_query = "Event added by Calsinki"
+            # Search for events with the generated identifier (e.g., "calsinki_demo_to_personal_synced=true")
+            search_property = f"{identifier}=true"
             
             events_result = service.events().list(
                 calendarId=calendar_id,
-                q=search_query,
+                privateExtendedProperty=search_property,
                 maxResults=100,
                 singleEvents=True
             ).execute()
             
             events = events_result.get('items', [])
-            self.logger.info(f"📅 Found {len(events)} events with Calsinki footer")
+            self.logger.info(f"📅 Found {len(events)} events with {identifier}=true")
             
             # Filter for events from this specific source calendar
             synced_events = []
