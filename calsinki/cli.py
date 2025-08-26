@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from calsinki import __version__
-from calsinki.config import Config, create_example_config
+from calsinki.config import Config, create_example_config, get_default_config_path, ensure_directories, get_credentials_dir, get_config_dir
 
 
 def main():
@@ -16,6 +16,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  calsinki init                    # Initialize configuration structure
   calsinki sync                    # Run calendar synchronization
   calsinki auth                    # Authenticate with Google accounts
   calsinki config                  # Show current configuration
@@ -33,8 +34,8 @@ Examples:
     parser.add_argument(
         "--config", 
         type=Path, 
-        default=Path("config.yaml"),
-        help="Path to configuration file (default: config.yaml)"
+        default=get_default_config_path(),
+        help=f"Path to configuration file (default: {get_default_config_path()})"
     )
     
     subparsers = parser.add_subparsers(
@@ -75,6 +76,17 @@ Examples:
         help="Show example configuration instead of current config"
     )
     
+    # Init command
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Initialize Calsinki configuration structure and create starter config"
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing configuration files"
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -89,6 +101,8 @@ Examples:
         return 0
     elif args.command == "config":
         return handle_config_command(args)
+    elif args.command == "init":
+        return handle_init_command(args)
     
     return 0
 
@@ -147,7 +161,7 @@ def handle_config_command(args) -> int:
         
     except FileNotFoundError:
         print(f"❌ Configuration file not found: {args.config}")
-        print("\n💡 Use 'calsinki config --example' to see an example configuration")
+        print("\n💡 Use 'calsinki init' to create a new configuration")
         return 1
     except Exception as e:
         print(f"❌ Error loading configuration: {e}")
@@ -220,6 +234,42 @@ def handle_sync_command(args) -> int:
         return 1
     except Exception as e:
         print(f"❌ Error during sync: {e}")
+        return 1
+
+
+def handle_init_command(args) -> int:
+    """Handle the init command."""
+    try:
+        print("🚀 Initializing Calsinki configuration structure...")
+        
+        # Ensure directories exist
+        ensure_directories()
+        
+        config_path = get_default_config_path()
+        example_config = create_example_config()
+        
+        # Check if config already exists
+        if config_path.exists() and not args.force:
+            print(f"⚠️  Configuration already exists at: {config_path}")
+            print("   Use --force to overwrite existing configuration")
+            return 1
+        
+        # Write configuration file
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.write(example_config)
+        
+        print(f"✅ Configuration initialized at: {config_path}")
+        print(f"📁 Credentials directory: {get_credentials_dir()}")
+        print(f"📁 Config directory: {get_config_dir()}")
+        print("\n💡 Next steps:")
+        print("   1. Edit the configuration file with your calendar details")
+        print("   2. Run 'calsinki auth' to authenticate with Google")
+        print("   3. Run 'calsinki sync' to start synchronization")
+        
+        return 0
+        
+    except Exception as e:
+        print(f"❌ Error during initialization: {e}")
         return 1
 
 

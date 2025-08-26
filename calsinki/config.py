@@ -1,9 +1,11 @@
 """Configuration management for Calsinki calendar synchronization service."""
 
 import yaml
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+from platformdirs import user_config_dir, user_data_dir
 
 
 @dataclass
@@ -182,18 +184,22 @@ calendars:
   - account_name: "work"
     calendar_id: "work@company.com"
     name: "Work Calendar"
+    description: "Primary work calendar"
   
   - account_name: "work"
     calendar_id: "team@company.com"
     name: "Team Calendar"
+    description: "Shared team events and meetings"
   
   - account_name: "personal"
     calendar_id: "personal@gmail.com"
     name: "Personal Calendar"
+    description: "Primary personal calendar"
   
   - account_name: "personal"
     calendar_id: "family@gmail.com"
     name: "Family Calendar"
+    description: "Shared family events"
 
 # Calendar synchronization pairs
 sync_pairs:
@@ -216,3 +222,35 @@ log_file: "./logs/calsinki.log"
 # Data directory for storing sync metadata
 data_dir: "./data"
 """
+
+
+def get_config_dir() -> Path:
+    """Get the standard configuration directory."""
+    xdg_config = os.environ.get('XDG_CONFIG_HOME')
+    if xdg_config:
+        return Path(xdg_config) / "calsinki"
+    return Path(user_config_dir("calsinki"))
+
+
+def get_credentials_dir() -> Path:
+    """Get the standard credentials directory."""
+    xdg_data = os.environ.get('XDG_DATA_HOME')
+    if xdg_data:
+        return Path(xdg_data) / "calsinki" / "credentials"
+    return Path(user_data_dir("calsinki")) / "credentials"
+
+
+def get_default_config_path() -> Path:
+    """Get the default configuration file path."""
+    return get_config_dir() / "config.yaml"
+
+
+def get_credentials_path(account_name: str) -> Path:
+    """Get the credentials file path for a specific account."""
+    return get_credentials_dir() / f"{account_name}.json"
+
+
+def ensure_directories():
+    """Ensure that the necessary directories exist."""
+    get_config_dir().mkdir(parents=True, exist_ok=True)
+    get_credentials_dir().mkdir(parents=True, exist_ok=True)

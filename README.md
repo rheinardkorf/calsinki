@@ -24,6 +24,32 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **Lightweight**: Minimal dependencies, runs on minimal Linux environments
 - **Automated**: Set it and forget it with cron or systemd timers
 
+## 🚀 Getting Started
+
+1. **Install Calsinki**: `pip install calsinki` or clone and run `uv pip install -e .`
+2. **Initialize**: `calsinki init` to create your configuration structure
+3. **Configure**: Edit the generated config file with your calendar details
+4. **Authenticate**: `calsinki auth` to set up Google Calendar access
+5. **Sync**: `calsinki sync` to start calendar synchronization
+
+## 📁 Configuration & Storage
+
+Calsinki follows the XDG Base Directory Specification for configuration and data storage:
+
+- **Configuration**: `$XDG_CONFIG_HOME/calsinki/config.yaml` (safe to commit to dotfiles)
+  Default locations:
+  - Linux: `~/.config/calsinki/config.yaml`
+  - macOS: `~/Library/Application Support/calsinki/config.yaml`
+  - Windows: `%APPDATA%\calsinki\config.yaml`
+- **Credentials**: `$XDG_DATA_HOME/calsinki/credentials/` (never commit - contains OAuth2 tokens)
+  Default locations:
+  - Linux: `~/.local/share/calsinki/credentials/`
+  - macOS: `~/Library/Application Support/calsinki/credentials/`
+  - Windows: `%LOCALAPPDATA%\calsinki\credentials\`
+- **Data**: `$XDG_DATA_HOME/calsinki/data/` (sync metadata and logs)
+
+If you have custom XDG paths set (e.g., `XDG_CONFIG_HOME=~/.config`), Calsinki will respect them automatically. Otherwise, it uses your operating system's default application directories.
+
 ## 🏗️ Architecture
 
 Calsinki is built as a Python command-line tool that:
