@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -14,16 +14,17 @@ from .auth import GoogleAuthenticator
 
 @dataclass
 class CalendarEvent:
-    """Represents a calendar event with sync metadata."""
+    """Represents a calendar event with Calsinki sync metadata."""
     event_id: str
     summary: str
-    description: str
     start: datetime
     end: datetime
-    location: Optional[str]
-    attendees: List[Dict[str, str]]
-    sync_metadata: Dict[str, Any]
+    description: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[Dict[str, str]]] = None
+    sync_metadata: Dict[str, Any] = field(default_factory=dict)
     original_event: Optional[Dict[str, Any]] = None  # Store original Google event data
+    google_event_id: Optional[str] = None  # Store Google Calendar event ID for deletion
     
     @classmethod
     def from_google_event(cls, event: Dict[str, Any], source_calendar_id: str) -> 'CalendarEvent':
@@ -37,7 +38,7 @@ class CalendarEvent:
         
         # Parse end time
         end_data = event.get('end', {})
-        if 'dateTime' in end_data:
+        if 'dateTime' in start_data:
             end = datetime.fromisoformat(end_data['dateTime'].replace('Z', '+00:00'))
         else:
             end = datetime.fromisoformat(end_data['date'] + 'T23:59:59+00:00')
@@ -59,6 +60,40 @@ class CalendarEvent:
             location=event.get('location'),
             attendees=event.get('attendees', []),
             sync_metadata=sync_metadata,
+            original_event=event  # Store the original event data
+        )
+
+    @classmethod
+    def from_destination_event(cls, event: Dict[str, Any], calendar_id: str) -> 'CalendarEvent':
+        """Create CalendarEvent from a destination calendar event, preserving original source metadata."""
+        # Parse start time
+        start_data = event.get('start', {})
+        if 'dateTime' in start_data:
+            start = datetime.fromisoformat(start_data['dateTime'].replace('Z', '+00:00'))
+        else:
+            start = datetime.fromisoformat(start_data['date'] + 'T00:00:00+00:00')
+        
+        # Parse end time
+        end_data = event.get('end', {})
+        if 'dateTime' in start_data:
+            end = datetime.fromisoformat(end_data['dateTime'].replace('Z', '+00:00'))
+        else:
+            end = datetime.fromisoformat(end_data['date'] + 'T23:59:59+00:00')
+        
+        # For destination events, preserve the original sync metadata
+        sync_metadata = {}
+        if 'extendedProperties' in event and 'private' in event['extendedProperties']:
+            sync_metadata = event['extendedProperties']['private']
+        
+        return cls(
+            event_id=event['id'],  # This is the destination event ID
+            summary=event.get('summary', 'No Title'),
+            description=event.get('description', ''),
+            start=start,
+            end=end,
+            location=event.get('location'),
+            attendees=event.get('attendees', []),
+            sync_metadata=sync_metadata,  # Preserve original metadata
             original_event=event  # Store the original event data
         )
 
@@ -126,12 +161,28 @@ class CalendarSynchronizer:
             source_events = self._fetch_calendar_events(source_service, source_cal.calendar_id)
             self.logger.info(f"📅 Found {len(source_events)} events in source calendar")
             
+            # Fetch existing synced events from destination calendar
+            # Search specifically for events with Calsinki footer from this source calendar
+            existing_synced_events = self._find_synced_events_by_search(dest_service, dest_cal.calendar_id, source_cal.calendar_id)
+            
+            print(f"🔍 Found {len(existing_synced_events)} existing synced events in destination calendar")
+            self.logger.info(f"📅 Found {len(existing_synced_events)} existing synced events in destination calendar")
+            
             # Apply privacy rules and sync to destination
             synced_count = self._sync_events_to_destination(
                 source_events, dest_service, dest_cal.calendar_id, sync_pair.privacy_mode, sync_pair.privacy_label, sync_pair
             )
             
-            self.logger.info(f"✅ Successfully synced {synced_count} events")
+            # Handle deletions - remove events that no longer exist in source
+            print(f"🔍 Starting deletion check with {len(source_events)} source events and {len(existing_synced_events)} existing events...")
+            self.logger.info(f"🔍 Starting deletion check...")
+            deleted_count = self._handle_deletions(
+                source_events, existing_synced_events, dest_service, dest_cal.calendar_id
+            )
+            print(f"🔍 Deletion check completed with {deleted_count} deletions")
+            self.logger.info(f"🔍 Deletion check completed with {deleted_count} deletions")
+            
+            self.logger.info(f"✅ Successfully synced {synced_count} events, deleted {deleted_count} events")
             return True
             
         except Exception as e:
@@ -149,33 +200,34 @@ class CalendarSynchronizer:
                 self.logger.error(f"❌ Cannot access calendar {calendar_id}: {e}")
                 return []
             
-            # Get events from the last 30 days and next 30 days
-            now = datetime.now(timezone.utc)
-            time_min = (now - timedelta(days=30)).isoformat() + 'Z'
-            time_max = (now + timedelta(days=30)).isoformat() + 'Z'
-            
-            self.logger.debug(f"🔍 Fetching events from {time_min} to {time_max}")
-            
-            # Try a simpler events request first
+            # Use 30-day time range (30 days ago to 30 days in future)
             try:
+                now = datetime.now(timezone.utc)
+                time_min = (now - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                time_max = (now + timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                
+                self.logger.debug(f"🔍 Fetching events from {time_min} to {time_max}")
+                
                 events_result = service.events().list(
                     calendarId=calendar_id,
-                    maxResults=10,  # Limit results for testing
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    maxResults=1000,
                     singleEvents=True
                 ).execute()
                 
                 events = events_result.get('items', [])
-                self.logger.info(f"📅 Found {len(events)} events in calendar {calendar_id}")
+                self.logger.info(f"📅 Found {len(events)} events in calendar {calendar_id} (time-ranged)")
                 return [CalendarEvent.from_google_event(event, calendar_id) for event in events]
                 
             except Exception as e:
-                self.logger.error(f"❌ Simple events request failed: {e}")
+                self.logger.error(f"❌ Events request failed: {e}")
                 
-                # Try without any time parameters
+                # Fallback: try without time range but with higher limit
                 try:
                     events_result = service.events().list(
                         calendarId=calendar_id,
-                        maxResults=5
+                        maxResults=1000
                     ).execute()
                     
                     events = events_result.get('items', [])
@@ -183,7 +235,7 @@ class CalendarSynchronizer:
                     return [CalendarEvent.from_google_event(event, calendar_id) for event in events]
                     
                 except Exception as e2:
-                    self.logger.error(f"❌ Events request without time filter also failed: {e2}")
+                    self.logger.error(f"❌ Events request with minimal parameters also failed: {e2}")
                     return []
             
         except Exception as e:
@@ -354,3 +406,182 @@ class CalendarSynchronizer:
             return configured_privacy_mode
         
         return configured_privacy_mode
+
+    def _fetch_synced_events(self, service: Any, calendar_id: str, source_calendar_id: str) -> List[Dict[str, Any]]:
+        """Fetch existing synced events from destination calendar."""
+        print(f"🔍 _fetch_synced_events called with calendar_id: {calendar_id}")
+        print(f"🔍 Looking for events from source_calendar_id: {source_calendar_id}")
+        
+        try:
+            self.logger.info(f"🔍 Fetching synced events from calendar {calendar_id}")
+            self.logger.info(f"🔍 Looking for events synced from source calendar {source_calendar_id}")
+            
+            # Try with time range first (same as sync functionality)
+            try:
+                from datetime import datetime, timedelta, timezone
+                now = datetime.now(timezone.utc)
+                time_min = (now - timedelta(days=30)).isoformat() + 'Z'
+                time_max = (now + timedelta(days=30)).isoformat() + 'Z'
+                
+                print(f"🔍 Approach 1: Searching events from {time_min} to {time_max}")
+                
+                events_result = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    maxResults=100,
+                    singleEvents=True
+                ).execute()
+                
+                events = events_result.get('items', [])
+                print(f"🔍 API returned {len(events)} total events in time range")
+                
+            except Exception as e:
+                print(f"❌ Approach 1 failed: {e}")
+                
+                # Fallback: try without time range but with reasonable limit
+                try:
+                    print("🔍 Approach 2: Searching without time range")
+                    events_result = service.events().list(
+                        calendarId=calendar_id,
+                        maxResults=500,  # Higher limit since no time filter
+                        singleEvents=True
+                    ).execute()
+                    
+                    events = events_result.get('items', [])
+                    print(f"🔍 API returned {len(events)} total events without time range")
+                    
+                except Exception as e2:
+                    print(f"❌ Approach 2 failed: {e2}")
+                    events = []
+            
+            if not events:
+                print("❌ Could not fetch any events")
+                return []
+            
+            self.logger.info(f"📅 Found {len(events)} total events in destination calendar")
+            
+            # Filter for events that were synced from this source calendar
+            synced_events = []
+            for event in events:
+                if 'extendedProperties' in event and 'private' in event['extendedProperties']:
+                    metadata = event['extendedProperties']['private']
+                    event_source_cal = metadata.get('source_calendar_id')
+                    if event_source_cal == source_calendar_id:
+                        synced_events.append(event)
+                        print(f"✅ Found synced event: {event.get('summary', 'Unknown')} from {event_source_cal}")
+                        self.logger.info(f"✅ Found synced event: {event.get('summary', 'Unknown')} from {event_source_cal}")
+                    else:
+                        print(f"🔍 Event {event.get('summary', 'Unknown')} has different source: {event_source_cal}")
+                        self.logger.debug(f"🔍 Event {event.get('summary', 'Unknown')} has different source: {event_source_cal}")
+                else:
+                    print(f"🔍 Event {event.get('summary', 'Unknown')} has no extended properties")
+                    self.logger.debug(f"🔍 Event {event.get('summary', 'Unknown')} has no extended properties")
+            
+            print(f"🔍 Total synced events found: {len(synced_events)}")
+            self.logger.info(f"📅 Found {len(synced_events)} synced events from source calendar {source_calendar_id}")
+            return synced_events
+            
+        except Exception as e:
+            print(f"❌ Error in _fetch_synced_events: {e}")
+            self.logger.error(f"❌ Failed to fetch synced events from calendar {calendar_id}: {e}")
+            # Return empty list on error - this means we won't be able to handle deletions
+            # but the sync will still work for creating/updating events
+            return []
+    
+    def _handle_deletions(
+        self, 
+        source_events: List[CalendarEvent], 
+        existing_synced_events: List[CalendarEvent], 
+        dest_service: Any, 
+        dest_calendar_id: str
+    ) -> int:
+        """Handle deletion of events that no longer exist in source calendar."""
+        deleted_count = 0
+        
+        self.logger.info(f"🔍 Checking for deletions: {len(source_events)} source events, {len(existing_synced_events)} existing synced events")
+        
+        # Create a set of source event IDs for fast lookup
+        source_event_ids = {event.event_id for event in source_events}
+        self.logger.info(f"📋 Source event IDs: {source_event_ids}")
+        
+        for synced_event in existing_synced_events:
+            try:
+                # Get the source event ID from sync metadata
+                source_event_id = synced_event.sync_metadata.get('source_event_id')
+                event_summary = synced_event.summary
+                
+                self.logger.info(f"🔍 Checking synced event '{event_summary}' with source ID: {source_event_id}")
+                self.logger.info(f"🔍 Source event ID '{source_event_id}' in source_event_ids: {source_event_id in source_event_ids}")
+                
+                if source_event_id and source_event_id not in source_event_ids:
+                    # This event no longer exists in source - delete it
+                    self.logger.info(f"🗑️  Deleting event '{event_summary}' - no longer exists in source")
+                    
+                    # We need to get the Google Calendar event ID to delete it
+                    # The CalendarEvent object should have the original event ID
+                    if hasattr(synced_event, 'google_event_id'):
+                        event_id = synced_event.google_event_id
+                    else:
+                        # Fallback: try to get from sync metadata
+                        event_id = synced_event.sync_metadata.get('source_event_id')
+                    
+                    if event_id:
+                        dest_service.events().delete(
+                            calendarId=dest_calendar_id,
+                            eventId=event_id
+                        ).execute()
+                        print(f"🗑️  Successfully deleted event '{event_summary}'")
+                        self.logger.info(f"✅ Successfully deleted event '{event_summary}'")
+                    else:
+                        print(f"⚠️  Could not delete event '{event_summary}' - missing event ID")
+                        self.logger.warning(f"⚠️  Could not delete event '{event_summary}' - missing event ID")
+                    
+                    deleted_count += 1
+                    self.logger.info(f"✅ Successfully identified event '{event_summary}' for deletion")
+                else:
+                    self.logger.info(f"✅ Event '{event_summary}' still exists in source, keeping it")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Failed to process event {synced_event.summary}: {e}")
+        
+        self.logger.info(f"🗑️  Deletion check complete: {deleted_count} events identified for deletion")
+        return deleted_count
+
+    def _find_synced_events_by_search(self, service: Any, calendar_id: str, source_calendar_id: str) -> List[CalendarEvent]:
+        """Find synced events by searching for Calsinki footer and filtering by source_calendar_id."""
+        try:
+            self.logger.info(f"🔍 Searching for events synced from calendar {source_calendar_id} in calendar {calendar_id}")
+            
+            # Search for events containing the Calsinki footer (this approach works)
+            search_query = "Event added by Calsinki"
+            
+            events_result = service.events().list(
+                calendarId=calendar_id,
+                q=search_query,
+                maxResults=100,
+                singleEvents=True
+            ).execute()
+            
+            events = events_result.get('items', [])
+            self.logger.info(f"📅 Found {len(events)} events with Calsinki footer")
+            
+            # Filter for events from this specific source calendar
+            synced_events = []
+            for event in events:
+                if 'extendedProperties' in event and 'private' in event['extendedProperties']:
+                    metadata = event['extendedProperties']['private']
+                    if metadata.get('source_calendar_id') == source_calendar_id:
+                        # Convert to CalendarEvent object using the destination event method
+                        calendar_event = CalendarEvent.from_destination_event(event, calendar_id)
+                        # Store the Google Calendar event ID for deletion
+                        calendar_event.google_event_id = event['id']
+                        synced_events.append(calendar_event)
+                        self.logger.info(f"✅ Found synced event: {event.get('summary', 'Unknown')} from {source_calendar_id}")
+            
+            self.logger.info(f"📅 Found {len(synced_events)} synced events from source calendar {source_calendar_id}")
+            return synced_events
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to search for synced events in calendar {calendar_id}: {e}")
+            return []
