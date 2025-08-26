@@ -1,30 +1,28 @@
 [project]
 name = "calsinki"
 version = "0.1.0"
-description = "A self-hosted calendar synchronization service for multiple Google Calendar accounts"
+description = "Self-hosted calendar synchronization service"
+authors = [
+    {name = "Rheinard Korf", email = "rheinard@thekorfs.com"}
+]
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [
-    {name = "Rheinard Korf", email = "rheinard@korf.com.au"}
-]
-license = {text = "MIT"}
-keywords = ["calendar", "sync", "google", "self-hosted", "privacy"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Office/Business :: Scheduling",
-    "Topic :: System :: Systems Administration",
-]
 dependencies = [
-    "google-api-python-client>=2.0.0",
-    "google-auth-oauthlib>=1.0.0",
-    "pyyaml>=6.0",
-    "qrcode[pil]>=7.0",
-    "requests>=2.31.0",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "pyyaml",
+    "platformdirs",
+    "qrcode[pil]>=8.2",
+    "requests>=2.32.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "black",
+    "isort",
+    "mypy",
 ]
 
 [project.scripts]
@@ -34,9 +32,77 @@ calsinki = "calsinki.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=7.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.black]
+target-version = ['py311']
+line-length = 88
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["calsinki"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "googleapiclient.*",
+    "google.oauth2.*",
+]
+ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250822",
+    "types-qrcode>=8.2.0.20250506",
 ]
