@@ -11,26 +11,28 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 ### ✨ Key Features
 
 - **🎭 Multi-Account Harmony**: Sync between multiple Google Calendar accounts seamlessly
-- **🔒 Privacy First**: Option to strip sensitive details when syncing to destination calendars
-- **🔄 Smart Sync**: Automatically updates and deletes events when source calendars change
+- **🔒 Privacy First**: Uses Google Calendar's native visibility settings (public/private) for smart privacy control
+- **🔄 Smart Sync**: Automatically detects and updates existing events, preventing duplicates
 - **📱 Mobile-Friendly Auth**: QR code authentication for easy setup on headless servers
 - **🏠 Homelab Ready**: Designed to run on your own infrastructure, not in the cloud
+- **🏷️ Custom Labels**: Configurable privacy labels for anonymous events with optional time display
 
 ## 🚀 Why Calsinki?
 
 - **Self-hosted**: Your calendar data stays on your infrastructure
-- **Privacy control**: Choose what information gets synced where
+- **Privacy control**: Automatically respects Google Calendar visibility settings
 - **No vendor lock-in**: You control the sync logic and data flow
 - **Lightweight**: Minimal dependencies, runs on minimal Linux environments
 - **Automated**: Set it and forget it with cron or systemd timers
 
 ## 🚀 Getting Started
 
-1. **Install Calsinki**: `pip install calsinki` or clone and run `uv pip install -e .`
-2. **Initialize**: `calsinki init` to create your configuration structure
-3. **Configure**: Edit the generated config file with your calendar details
-4. **Authenticate**: `calsinki auth` to set up Google Calendar access
-5. **Sync**: `calsinki sync` to start calendar synchronization
+1. **Clone and Setup**: `git clone <repo>` then `uv venv` and `source .venv/bin/activate`
+2. **Install Dependencies**: `uv sync` to install all required packages
+3. **Initialize**: `calsinki init` to create your configuration structure
+4. **Configure**: Edit the generated config file with your calendar details
+5. **Authenticate**: `calsinki auth <account_name>` to set up Google Calendar access
+6. **Sync**: `calsinki sync` or `calsinki sync <pair_id>` to start calendar synchronization
 
 ## 📁 Configuration & Storage
 
@@ -41,6 +43,7 @@ Calsinki follows the XDG Base Directory Specification for configuration and data
   - Linux: `~/.config/calsinki/config.yaml`
   - macOS: `~/Library/Application Support/calsinki/config.yaml`
   - Windows: `%APPDATA%\calsinki\config.yaml`
+- **OAuth2 Config**: `$XDG_CONFIG_HOME/calsinki/oauth2_config.yaml` (contains Google API credentials)
 - **Credentials**: `$XDG_DATA_HOME/calsinki/credentials/` (never commit - contains OAuth2 tokens)
   Default locations:
   - Linux: `~/.local/share/calsinki/credentials/`
@@ -54,19 +57,19 @@ If you have custom XDG paths set (e.g., `XDG_CONFIG_HOME=~/.config`), Calsinki w
 
 Calsinki is built as a Python command-line tool that:
 1. Reads configuration from a simple YAML file
-2. Authenticates with Google Calendar APIs using OAuth2
-3. Syncs events between source and destination calendars
-4. Maintains sync metadata for reliable updates and deletions
+2. Authenticates with Google Calendar APIs using OAuth2 device flow
+3. Syncs events between source and destination calendars with privacy controls
+4. Maintains sync metadata for reliable updates and duplicate prevention
 5. Runs automatically on your schedule
 
 ## 🛠️ Tech Stack
 
-- **Python**: Core application logic
-- **Google Calendar API**: Calendar operations
-- **OAuth2**: Secure authentication
+- **Python 3.11+**: Core application logic
+- **Google Calendar API**: Calendar operations and event management
+- **OAuth2 Device Flow**: Secure authentication for headless environments
 - **YAML**: Human-readable configuration
 - **uv**: Fast Python package management
-- **QR Codes**: Easy mobile authentication
+- **QR Codes**: Easy mobile authentication setup
 
 ## 🎭 The Name
 
@@ -74,10 +77,13 @@ Calsinki is built as a Python command-line tool that:
 
 ## 🔮 Roadmap
 
-- [ ] Core sync functionality
-- [ ] OAuth2 authentication with QR codes
-- [ ] Configuration management
-- [ ] Error handling and logging
+- [x] Core sync functionality with Google Calendar API
+- [x] OAuth2 authentication with QR codes and device flow
+- [x] Configuration management with YAML
+- [x] Error handling and logging
+- [x] Privacy modes (public/private) with Google Calendar visibility integration
+- [x] Duplicate prevention and smart event updates
+- [x] Custom privacy labels and time display options
 - [ ] Cron/systemd integration
 - [ ] Docker containerization
 - [ ] Monitoring and health checks
