@@ -25,6 +25,9 @@ Examples:
   calsinki auth personal           # Authenticate specific account
   calsinki auth xteam personal     # Authenticate multiple specific accounts
   calsinki sync                    # Run calendar synchronization
+  calsinki sync --dry-run          # Preview sync without making changes
+  calsinki sync demo_to_personal   # Sync specific sync pair
+  calsinki sync --list             # List available sync pairs
   calsinki purge demo_to_personal  # Remove events from specific sync pair
   calsinki purge --all             # Remove all synced events from all pairs
   calsinki purge --dry-run         # Show what would be purged
@@ -66,6 +69,11 @@ Examples:
         "--list",
         action="store_true",
         help="List available sync pairs instead of syncing"
+    )
+    sync_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be synced without actually modifying calendars"
     )
     
     # Purge command
@@ -259,7 +267,11 @@ def handle_sync_command(args) -> int:
             print(f"🔄 Syncing all {len(pairs_to_sync)} enabled pair(s)")
         
         # Perform actual synchronization
-        print("🚀 Starting calendar synchronization...")
+        if args.dry_run:
+            print("🔍 DRY RUN MODE - No calendars will be modified")
+            print("🚀 Starting calendar synchronization preview...")
+        else:
+            print("🚀 Starting calendar synchronization...")
         
         # Initialize the synchronizer
         synchronizer = CalendarSynchronizer(config)
@@ -270,19 +282,28 @@ def handle_sync_command(args) -> int:
             dest_cal = config.get_calendar_by_id(pair.destination_calendar)
             
             if source_cal and dest_cal:
-                print(f"\n🔄 Syncing [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
+                if args.dry_run:
+                    print(f"\n🔍 DRY RUN: Would sync [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
+                else:
+                    print(f"\n🔄 Syncing [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})")
                 
-                # Perform the sync
-                success = synchronizer.sync_pair(pair)
+                # Perform the sync (with dry-run support)
+                success = synchronizer.sync_pair(pair, dry_run=args.dry_run)
                 
                 if success:
-                    print(f"  ✅ Sync completed successfully")
+                    if args.dry_run:
+                        print(f"  🔍 DRY RUN: Sync preview completed successfully")
+                    else:
+                        print(f"  ✅ Sync completed successfully")
                 else:
                     print(f"  ❌ Sync failed")
             else:
                 print(f"  ❌ [{pair.id}] Calendar details not found")
         
-        print(f"\n🎉 Synchronization complete!")
+        if args.dry_run:
+            print(f"\n🔍 DRY RUN COMPLETE - No changes were made to calendars")
+        else:
+            print(f"\n🎉 Synchronization complete!")
         return 0
         
     except FileNotFoundError:

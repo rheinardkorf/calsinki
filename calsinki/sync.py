@@ -136,7 +136,7 @@ class CalendarSynchronizer:
             except Exception as e:
                 self.logger.error(f"❌ Failed to initialize service for {account.name}: {e}")
     
-    def sync_pair(self, sync_pair: SyncPair) -> bool:
+    def sync_pair(self, sync_pair: SyncPair, dry_run: bool = False) -> bool:
         """Synchronize a single sync pair."""
         try:
             # Get source and destination calendars
@@ -155,7 +155,11 @@ class CalendarSynchronizer:
                 self.logger.error(f"❌ Calendar service not available for sync pair {sync_pair.id}")
                 return False
             
-            self.logger.info(f"🔄 Starting sync: {source_cal.name} → {dest_cal.name}")
+            if dry_run:
+                self.logger.info(f"🔍 DRY RUN: Would sync {source_cal.name} → {dest_cal.name}")
+                print(f"🔍 DRY RUN: Would sync {source_cal.name} → {dest_cal.name}")
+            else:
+                self.logger.info(f"🔄 Starting sync: {source_cal.name} → {dest_cal.name}")
             
             # Fetch events from source calendar
             source_events = self._fetch_calendar_events(source_service, source_cal.calendar_id)
@@ -168,6 +172,21 @@ class CalendarSynchronizer:
             
             print(f"🔍 Found {len(existing_synced_events)} existing synced events in destination calendar")
             self.logger.info(f"📅 Found {len(existing_synced_events)} existing synced events in destination calendar")
+            
+            if dry_run:
+                # In dry-run mode, just show what would happen
+                print(f"🔍 DRY RUN: Would sync {len(source_events)} events from source")
+                print(f"🔍 DRY RUN: Would check {len(existing_synced_events)} existing events for updates/deletions")
+                
+                # Show some example events that would be synced
+                if source_events:
+                    print(f"🔍 DRY RUN: Example events to sync:")
+                    for i, event in enumerate(source_events[:3]):  # Show first 3 events
+                        print(f"   • {event.summary} ({event.start.strftime('%Y-%m-%d %H:%M')})")
+                    if len(source_events) > 3:
+                        print(f"   ... and {len(source_events) - 3} more events")
+                
+                return True
             
             # Apply privacy rules and sync to destination
             synced_count = self._sync_events_to_destination(
