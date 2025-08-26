@@ -9,6 +9,7 @@ from calsinki import __version__
 from calsinki.config import Config, create_example_config, get_default_config_path, ensure_directories, get_credentials_dir, get_config_dir
 from calsinki.auth import create_oauth2_config_file, load_oauth2_config, GoogleAuthenticator
 from calsinki.sync import CalendarSynchronizer
+from calsinki.purge import handle_purge_all_command, handle_purge_pairs_command
 
 
 def main():
@@ -24,6 +25,9 @@ Examples:
   calsinki auth personal           # Authenticate specific account
   calsinki auth xteam personal     # Authenticate multiple specific accounts
   calsinki sync                    # Run calendar synchronization
+  calsinki purge demo_to_personal  # Remove events from specific sync pair
+  calsinki purge --all             # Remove all synced events from all pairs
+  calsinki purge --dry-run         # Show what would be purged
   calsinki config                  # Show current configuration
   calsinki config --example        # Show example configuration
   calsinki --version              # Show version information
@@ -62,6 +66,28 @@ Examples:
         "--list",
         action="store_true",
         help="List available sync pairs instead of syncing"
+    )
+    
+    # Purge command
+    purge_parser = subparsers.add_parser(
+        'purge',
+        help='Purge synced events from calendars',
+        description='Remove all events created by Calsinki synchronization. Use --all to purge all events, or specify sync pair IDs for targeted purging.'
+    )
+    purge_parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Purge ALL events from ALL calendars (REQUIRED for safety)'
+    )
+    purge_parser.add_argument(
+        'pairs',
+        nargs='*',
+        help='Specific sync pair IDs to purge (REQUIRED unless using --all)'
+    )
+    purge_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be purged without actually deleting events'
     )
     
     # Auth command
@@ -117,6 +143,8 @@ Examples:
         return handle_config_command(args)
     elif args.command == "init":
         return handle_init_command(args)
+    elif args.command == "purge":
+        return handle_purge_command(args)
     
     return 0
 
@@ -338,6 +366,45 @@ def handle_auth_command(args) -> int:
         
     except Exception as e:
         print(f"❌ Error during authentication: {e}")
+        return 1
+
+
+def handle_purge_command(args) -> int:
+    """Handle the purge command."""
+    try:
+        print("🗑️  Starting event purge operation...")
+        
+        # Safety check: require explicit --all or specific sync pair IDs
+        if not args.all and not args.pairs:
+            print("❌ SAFETY ERROR: No purge target specified!")
+            print("💡 You must either:")
+            print("   • Use --all to purge ALL events from ALL calendars")
+            print("   • Specify sync pair IDs: calsinki purge sync_pair_1 sync_pair_2")
+            print("💡 This prevents accidental deletion of all synced events.")
+            return 1
+        
+        # Load configuration
+        config = Config.from_file(args.config)
+        
+        # Load OAuth2 configuration
+        oauth2_config = load_oauth2_config()
+        if not oauth2_config:
+            print("❌ OAuth2 configuration not found")
+            print("💡 Run 'calsinki auth --setup' to create the configuration file")
+            return 1
+        
+        # Initialize synchronizer for API access
+        synchronizer = CalendarSynchronizer(config)
+        
+        if args.all:
+            # Purge all events using default identifier
+            return handle_purge_all_command(args, config, synchronizer)
+        else:
+            # Purge specific sync pairs
+            return handle_purge_pairs_command(args, config, synchronizer)
+            
+    except Exception as e:
+        print(f"❌ Error during purge operation: {e}")
         return 1
 
 
