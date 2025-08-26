@@ -13,9 +13,12 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **🎭 Multi-Account Harmony**: Sync between multiple Google Calendar accounts seamlessly
 - **🔒 Privacy First**: Uses Google Calendar's native visibility settings (public/private) for smart privacy control
 - **🔄 Smart Sync**: Automatically detects and updates existing events, preventing duplicates
+- **🗑️ Event Lifecycle Management**: Automatically removes events deleted from source calendars
+- **🏷️ Custom Labels**: Configurable privacy labels for anonymous events with optional time display
+- **🔍 Safe Preview**: Dry-run mode for both sync and purge operations
+- **🧹 Cleanup Tools**: Purge synced events with granular control
 - **📱 Mobile-Friendly Auth**: QR code authentication for easy setup on headless servers
 - **🏠 Homelab Ready**: Designed to run on your own infrastructure, not in the cloud
-- **🏷️ Custom Labels**: Configurable privacy labels for anonymous events with optional time display
 
 ## 🚀 Why Calsinki?
 
@@ -24,6 +27,8 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **No vendor lock-in**: You control the sync logic and data flow
 - **Lightweight**: Minimal dependencies, runs on minimal Linux environments
 - **Automated**: Set it and forget it with cron or systemd timers
+- **Safe operations**: Dry-run mode prevents accidental changes
+- **Complete lifecycle**: Handles creation, updates, and deletion of events
 
 ## 🚀 Getting Started
 
@@ -33,6 +38,38 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 4. **Configure**: Edit the generated config file with your calendar details
 5. **Authenticate**: `calsinki auth <account_name>` to set up Google Calendar access
 6. **Sync**: `calsinki sync` or `calsinki sync <pair_id>` to start calendar synchronization
+
+## 🎮 Command Reference
+
+### Core Commands
+```bash
+calsinki init                    # Initialize configuration structure
+calsinki auth --setup            # Set up OAuth2 configuration
+calsinki auth                    # Authenticate all accounts
+calsinki auth personal           # Authenticate specific account
+calsinki config                  # Show current configuration
+calsinki config --example        # Show example configuration
+```
+
+### Synchronization
+```bash
+calsinki sync                    # Sync all enabled sync pairs
+calsinki sync --dry-run          # Preview sync without making changes
+calsinki sync demo_to_personal   # Sync specific sync pair
+calsinki sync --list             # List available sync pairs
+```
+
+### Event Management
+```bash
+calsinki purge demo_to_personal  # Remove events from specific sync pair
+calsinki purge --all             # Remove all synced events from all pairs
+calsinki purge --dry-run         # Show what would be purged
+```
+
+### Safe Operations
+Both `sync` and `purge` commands support `--dry-run` mode for safe previewing:
+- **Sync dry-run**: Shows what events would be synced without modifying calendars
+- **Purge dry-run**: Shows what events would be deleted without removing them
 
 ## 📁 Configuration & Storage
 
@@ -60,7 +97,9 @@ Calsinki is built as a Python command-line tool that:
 2. Authenticates with Google Calendar APIs using OAuth2 device flow
 3. Syncs events between source and destination calendars with privacy controls
 4. Maintains sync metadata for reliable updates and duplicate prevention
-5. Runs automatically on your schedule
+5. Automatically handles event lifecycle (creation, updates, deletion)
+6. Provides safe preview modes for all operations
+7. Runs automatically on your schedule
 
 ## 🛠️ Tech Stack
 
@@ -70,6 +109,7 @@ Calsinki is built as a Python command-line tool that:
 - **YAML**: Human-readable configuration
 - **uv**: Fast Python package management
 - **QR Codes**: Easy mobile authentication setup
+- **Dataclasses**: Clean, type-safe data structures
 
 ## 🎭 The Name
 
@@ -84,6 +124,9 @@ Calsinki is built as a Python command-line tool that:
 - [x] Privacy modes (public/private) with Google Calendar visibility integration
 - [x] Duplicate prevention and smart event updates
 - [x] Custom privacy labels and time display options
+- [x] Event deletion synchronization
+- [x] Purge functionality with safety controls
+- [x] Dry-run mode for safe operations
 - [ ] Cron/systemd integration
 - [ ] Docker containerization
 - [ ] Monitoring and health checks
