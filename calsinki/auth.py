@@ -9,7 +9,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from .config import get_config_dir, get_credentials_path
+from .config import get_config_dir, get_credentials_path, get_oauth2_config_path
 
 
 @dataclass
@@ -182,7 +182,7 @@ class GoogleAuthenticator:
 
 def create_oauth2_config_file():
     """Create a template OAuth2 configuration file."""
-    config_path = get_config_dir() / "oauth2_config.yaml"
+    config_path = get_oauth2_config_path()
 
     template = """# OAuth2 Configuration for Google Calendar API
 # Copy this file and fill in your Google Cloud Console credentials
@@ -206,7 +206,7 @@ def load_oauth2_config() -> OAuth2Config | None:
     """Load OAuth2 configuration from file."""
     import yaml
 
-    config_path = get_config_dir() / "oauth2_config.yaml"
+    config_path = get_oauth2_config_path()
 
     if not config_path.exists():
         print(f"⚠️  OAuth2 configuration not found at {config_path}")

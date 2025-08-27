@@ -86,7 +86,7 @@ Calsinki follows the XDG Base Directory Specification for configuration and data
   - Linux: `~/.config/calsinki/config.yaml`
   - macOS: `~/Library/Application Support/calsinki/config.yaml`
   - Windows: `%APPDATA%\calsinki\config.yaml`
-- **OAuth2 Config**: `$XDG_CONFIG_HOME/calsinki/oauth2_config.yaml` (contains Google API credentials)
+- **OAuth2 Config**: `$XDG_DATA_HOME/calsinki/credentials/oauth2_config.yaml` (contains Google API credentials - never commit)
 - **Credentials**: `$XDG_DATA_HOME/calsinki/credentials/` (never commit - contains OAuth2 tokens)
   Default locations:
   - Linux: `~/.local/share/calsinki/credentials/`
@@ -95,6 +95,12 @@ Calsinki follows the XDG Base Directory Specification for configuration and data
 - **Data**: `$XDG_DATA_HOME/calsinki/data/` (sync metadata and logs)
 
 If you have custom XDG paths set (e.g., `XDG_CONFIG_HOME=~/.config`), Calsinki will respect them automatically. Otherwise, it uses your operating system's default application directories.
+
+### 🔒 Security & Privacy
+- **Configuration files** (`config.yaml`) are safe to commit to dotfiles
+- **OAuth2 credentials** and **API keys** are stored in `$XDG_DATA_HOME` (never commit)
+- **Sync metadata** is stored in destination events (Google Calendar handles privacy)
+- **No sensitive data** is logged or transmitted beyond Google's secure APIs
 
 ## 🎨 Event Customization
 

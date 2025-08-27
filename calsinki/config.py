@@ -291,6 +291,11 @@ def get_credentials_path(account_name: str) -> Path:
     return get_credentials_dir() / f"{account_name}.json"
 
 
+def get_oauth2_config_path() -> Path:
+    """Get the OAuth2 configuration file path in the data directory."""
+    return get_credentials_dir() / "oauth2_config.yaml"
+
+
 def ensure_directories():
     """Ensure that the necessary directories exist."""
     get_config_dir().mkdir(parents=True, exist_ok=True)
