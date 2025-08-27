@@ -189,6 +189,14 @@ def handle_config_command(args) -> int:
                 print(
                     f"  • [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode}) - {status}"
                 )
+                # Show title customization if configured
+                title_custom = []
+                if pair.title_prefix:
+                    title_custom.append(f"prefix: '{pair.title_prefix}'")
+                if pair.title_suffix:
+                    title_custom.append(f"suffix: '{pair.title_suffix}'")
+                if title_custom:
+                    print(f"    └─ Title: {', '.join(title_custom)}")
                 print(
                     f"    └─ {source_cal.account_name}:{pair.source_calendar} → {dest_cal.account_name}:{pair.destination_calendar}"
                 )

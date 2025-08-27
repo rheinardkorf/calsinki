@@ -43,6 +43,8 @@ class SyncPair:
     show_time: bool = (
         False  # Whether to show time in privacy labels (defaults to false)
     )
+    title_prefix: str = ""  # Optional prefix to add to destination event titles
+    title_suffix: str = ""  # Optional suffix to add to destination event titles
     enabled: bool = True
 
 
@@ -240,12 +242,15 @@ sync_pairs:
     source_calendar: "work@company.com"
     destination_calendar: "personal@gmail.com"
     privacy_mode: "private"  # Strip sensitive details
+    title_prefix: "[WORK] "  # Add work prefix to identify source
+    title_suffix: " (synced)"  # Add suffix to show it's synced
     enabled: true
 
   - id: "team_to_family"
     source_calendar: "team@company.com"
     destination_calendar: "family@gmail.com"
-    privacy_mode: "preserve"  # Keep all details
+    privacy_mode: "public"  # Keep all details
+    title_prefix: "TEAM: "  # Add team prefix
     enabled: true
 
 # Logging configuration

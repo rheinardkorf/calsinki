@@ -376,6 +376,8 @@ class CalendarSynchronizer:
                     privacy_label,
                     sync_pair.show_time,
                     effective_identifier,
+                    sync_pair.title_prefix,
+                    sync_pair.title_suffix,
                 )
 
                 # Check if event already exists in destination
@@ -412,6 +414,8 @@ class CalendarSynchronizer:
         privacy_label: str = "Busy",
         show_time: bool = False,
         identifier: str = "calsinki",
+        title_prefix: str = "",
+        title_suffix: str = "",
     ) -> dict[str, Any]:
         """Apply privacy rules to an event."""
         # Format dates properly for Google Calendar API
@@ -457,8 +461,15 @@ class CalendarSynchronizer:
                 else calsinki_footer
             )
 
+            # Apply prefix and suffix to summary
+            summary = event.summary
+            if title_prefix:
+                summary = f"{title_prefix} {summary}"
+            if title_suffix:
+                summary = f"{summary} {title_suffix}"
+
             return {
-                "summary": event.summary,
+                "summary": summary,
                 "description": description,
                 "start": start_data,
                 "end": end_data,
@@ -469,6 +480,12 @@ class CalendarSynchronizer:
         elif privacy_mode == "private":
             # Remove ALL identifiable details - completely anonymous
             description = calsinki_footer
+
+            # Apply prefix and suffix to summary
+            if title_prefix:
+                summary = f"{title_prefix} {summary}"
+            if title_suffix:
+                summary = f"{summary} {title_suffix}"
 
             return {
                 "summary": summary,
@@ -489,6 +506,8 @@ class CalendarSynchronizer:
                 privacy_label,
                 show_time,
                 identifier,
+                title_prefix,
+                title_suffix,
             )
 
     def _find_existing_event(
