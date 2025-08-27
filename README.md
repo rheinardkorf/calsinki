@@ -135,6 +135,16 @@ Calsinki automatically adds comprehensive metadata to all synced events:
 
 This metadata is stored in the event's extended properties and can be viewed in Google Calendar's event details.
 
+### Bi-Directional Sync Protection
+Calsinki automatically prevents infinite sync loops when using bi-directional sync pairs. If you set up sync pairs in both directions (e.g., `personal_to_work` and `work_to_personal`), Calsinki will:
+
+- **Detect Calsinki-synced events** in source calendars
+- **Skip syncing** events that already have Calsinki metadata
+- **Prevent loops** from creating endless event duplication
+- **Log skips** for debugging and monitoring
+
+This ensures safe bi-directional synchronization without manual intervention.
+
 ### Example Configuration
 ```yaml
 sync_pairs:

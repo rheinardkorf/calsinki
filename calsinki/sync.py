@@ -47,13 +47,19 @@ class CalendarEvent:
         else:
             end = datetime.fromisoformat(end_data["date"] + "T23:59:59+00:00")
 
-        # Extract sync metadata
-        sync_metadata = {
-            "source_calendar_id": source_calendar_id,
-            "source_event_id": event["id"],
-            "last_synced": datetime.now(UTC).isoformat(),
-            "sync_version": 1,
-        }
+        # Check if this event already has Calsinki metadata (to prevent loops)
+        sync_metadata = {}
+        if "extendedProperties" in event and "private" in event["extendedProperties"]:
+            # Event already has metadata, preserve it
+            sync_metadata = event["extendedProperties"]["private"]
+        else:
+            # Event has no metadata, create new metadata for syncing
+            sync_metadata = {
+                "source_calendar_id": source_calendar_id,
+                "source_event_id": event["id"],
+                "last_synced": datetime.now(UTC).isoformat(),
+                "sync_version": 1,
+            }
 
         return cls(
             event_id=event["id"],
@@ -206,23 +212,46 @@ class CalendarSynchronizer:
             )
 
             if dry_run:
-                # In dry-run mode, just show what would happen
+                # In dry-run mode, simulate the sync process to show what would be skipped
                 print(f"🔍 DRY RUN: Would sync {len(source_events)} events from source")
                 print(
                     f"🔍 DRY RUN: Would check {len(existing_synced_events)} existing events for updates/deletions"
                 )
 
-                # Show some example events that would be synced
-                if source_events:
-                    print("🔍 DRY RUN: Example events to sync:")
-                    for _i, event in enumerate(
-                        source_events[:3]
-                    ):  # Show first 3 events
-                        print(
-                            f"   • {event.summary} ({event.start.strftime('%Y-%m-%d %H:%M')})"
-                        )
-                    if len(source_events) > 3:
-                        print(f"   ... and {len(source_events) - 3} more events")
+                # Simulate the loop prevention check
+                skipped_count = 0
+                events_to_sync = []
+                
+                for event in source_events:
+                    # Check if this event would be skipped due to loop prevention
+                    effective_privacy_mode = self._get_effective_privacy_mode(
+                        event, sync_pair.privacy_mode
+                    )
+                    
+                    source_cal = self.config.get_calendar_by_id(
+                        event.sync_metadata["source_calendar_id"]
+                    )
+                    source_cal_name = source_cal.name if source_cal else "Unknown Calendar"
+                    
+                    effective_identifier = self.config.get_effective_identifier(sync_pair)
+                    instance_identifier = getattr(self.config, "default_identifier", "calsinki") or "calsinki"
+                    
+                    if self._is_calsinki_synced_event(event, instance_identifier):
+                        print(f"🔍 DRY RUN: ⏭️  Would skip '{event.summary}' - already synced by Calsinki (prevents bi-directional sync loops)")
+                        skipped_count += 1
+                    else:
+                        events_to_sync.append(event)
+
+                # Show events that would actually be synced
+                if events_to_sync:
+                    print("🔍 DRY RUN: Events that would be synced:")
+                    for event in events_to_sync[:3]:  # Show first 3 events
+                        print(f"   • {event.summary} ({event.start.strftime('%Y-%m-%d %H:%M')})")
+                    if len(events_to_sync) > 3:
+                        print(f"   ... and {len(events_to_sync) - 3} more events")
+                
+                if skipped_count > 0:
+                    print(f"🔍 DRY RUN: {skipped_count} events would be skipped due to loop prevention")
 
                 return True
 
@@ -371,6 +400,15 @@ class CalendarSynchronizer:
                 
                 # Get the instance-level identifier (without sync pair suffix)
                 instance_identifier = getattr(self.config, "default_identifier", "calsinki") or "calsinki"
+
+                # Check if this source event is already a Calsinki-synced event to prevent loops
+                if self._is_calsinki_synced_event(event, instance_identifier):
+                    skip_msg = f"⏭️  Skipping {event.summary} - already synced by Calsinki (prevents bi-directional sync loops)"
+                    self.logger.info(skip_msg)
+                    continue
+                
+                # Debug: Log what metadata the event has
+                self.logger.debug(f"Event '{event.summary}' metadata: {event.sync_metadata}")
 
                 # Update the last_synced timestamp for this sync operation
                 event.sync_metadata["last_synced"] = datetime.now(UTC).isoformat()
@@ -623,6 +661,37 @@ class CalendarSynchronizer:
             return configured_privacy_mode
 
         return configured_privacy_mode
+
+    def _is_calsinki_synced_event(self, event: CalendarEvent, instance_identifier: str) -> bool:
+        """
+        Check if an event is already a Calsinki-synced event to prevent bi-directional sync loops.
+        
+        Args:
+            event: The CalendarEvent to check
+            instance_identifier: The instance identifier (e.g., "calsinki", "my_brand")
+            
+        Returns:
+            True if the event is already synced by Calsinki, False otherwise
+        """
+        # Check the original Google Calendar event's extended properties
+        if hasattr(event, 'original_event') and event.original_event:
+            original_event = event.original_event
+            
+            # Check if the event has extended properties with Calsinki identifiers
+            if "extendedProperties" in original_event and "private" in original_event["extendedProperties"]:
+                private_props = original_event["extendedProperties"]["private"]
+                
+                # Check for the instance-level identifier (e.g., "calsinki_synced=true")
+                instance_synced_key = f"{instance_identifier}_synced"
+                if instance_synced_key in private_props and private_props[instance_synced_key] == "true":
+                    return True
+                    
+                # Check for any sync pair identifier (e.g., "calsinki_demo_to_personal_synced=true")
+                for key in private_props.keys():
+                    if key.endswith("_synced") and private_props[key] == "true":
+                        return True
+        
+        return False
 
     def _fetch_synced_events(
         self, service: Any, calendar_id: str, source_calendar_id: str
