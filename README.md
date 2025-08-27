@@ -20,12 +20,6 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **📱 Mobile-Friendly Auth**: QR code authentication for easy setup on headless servers
 - **🏠 Homelab Ready**: Designed to run on your own infrastructure, not in the cloud
 
-### 🚧 Coming Soon
-
-- **⏰ Sync Timestamps**: Track when each sync pair was last updated
-- **📊 Sync Analytics**: Monitor sync performance and event statistics
-- **🔍 Smart Filtering**: Advanced event filtering by date, type, and content
-
 ## 🚀 Why Calsinki?
 
 - **Self-hosted**: Your calendar data stays on your infrastructure
