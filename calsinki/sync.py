@@ -372,6 +372,13 @@ class CalendarSynchronizer:
                 # Get the instance-level identifier (without sync pair suffix)
                 instance_identifier = getattr(self.config, "default_identifier", "calsinki") or "calsinki"
 
+                # Update the last_synced timestamp for this sync operation
+                event.sync_metadata["last_synced"] = datetime.now(UTC).isoformat()
+                
+                # Increment sync count
+                current_sync_count = event.sync_metadata.get("sync_count", 0)
+                event.sync_metadata["sync_count"] = current_sync_count + 1
+
                 synced_event = self._apply_privacy_rules(
                     event,
                     effective_privacy_mode,
@@ -457,6 +464,8 @@ class CalendarSynchronizer:
                 **event.sync_metadata,
                 f"{instance_identifier}_synced": "true",  # Instance-level: "mybrand_synced=true"
                 identifier: "true",  # Sync pair-level: "mybrand_demo_sync_synced=true"
+                "last_sync_human": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),  # Human-readable timestamp
+                "sync_count": event.sync_metadata.get("sync_count", 1),  # Number of times this event has been synced
             }
         }
 

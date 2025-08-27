@@ -123,6 +123,18 @@ You can assign specific colors to synced events using Google Calendar's color ID
 
 **Note**: Leave `event_color` empty (`""`) or omit the field to use the destination calendar's default color.
 
+### Sync Metadata
+Calsinki automatically adds comprehensive metadata to all synced events:
+
+- **`last_synced`**: ISO timestamp of when the event was last synchronized
+- **`last_sync_human`**: Human-readable timestamp (e.g., "2025-01-27 14:30:45 UTC")
+- **`sync_count`**: Number of times the event has been synchronized
+- **`source_calendar_id`**: ID of the source calendar
+- **`source_event_id`**: Original event ID from the source calendar
+- **`sync_version`**: Version of the sync metadata format
+
+This metadata is stored in the event's extended properties and can be viewed in Google Calendar's event details.
+
 ### Example Configuration
 ```yaml
 sync_pairs:
@@ -175,7 +187,7 @@ Calsinki is built as a Python command-line tool that:
 - [x] Dry-run mode for safe operations
 - [x] Custom event title prefixes/suffixes per sync pair
 - [x] Destination event color customization per sync pair
-- [ ] Sync timestamps and metadata tracking
+- [x] Sync timestamps and metadata tracking
 
 ## 🤝 Contributing
 
