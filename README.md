@@ -20,6 +20,13 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **📱 Mobile-Friendly Auth**: QR code authentication for easy setup on headless servers
 - **🏠 Homelab Ready**: Designed to run on your own infrastructure, not in the cloud
 
+### 🚧 Coming Soon
+
+- **⏰ Sync Timestamps**: Track when each sync pair was last updated
+- **🎨 Event Customization**: Custom prefixes/suffixes and colors for destination events
+- **📊 Sync Analytics**: Monitor sync performance and event statistics
+- **🔍 Smart Filtering**: Advanced event filtering by date, type, and content
+
 ## 🚀 Why Calsinki?
 
 - **Self-hosted**: Your calendar data stays on your infrastructure
@@ -127,9 +134,9 @@ Calsinki is built as a Python command-line tool that:
 - [x] Event deletion synchronization
 - [x] Purge functionality with safety controls
 - [x] Dry-run mode for safe operations
-- [ ] Cron/systemd integration
-- [ ] Docker containerization
-- [ ] Monitoring and health checks
+- [ ] Sync timestamps and metadata tracking
+- [ ] Custom event title prefixes/suffixes per sync pair
+- [ ] Destination event color customization per sync pair
 
 ## 🤝 Contributing
 
