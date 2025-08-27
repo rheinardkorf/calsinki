@@ -368,6 +368,9 @@ class CalendarSynchronizer:
 
                 # Get the effective identifier for this sync pair
                 effective_identifier = self.config.get_effective_identifier(sync_pair)
+                
+                # Get the instance-level identifier (without sync pair suffix)
+                instance_identifier = getattr(self.config, "default_identifier", "calsinki") or "calsinki"
 
                 synced_event = self._apply_privacy_rules(
                     event,
@@ -376,6 +379,7 @@ class CalendarSynchronizer:
                     privacy_label,
                     sync_pair.show_time,
                     effective_identifier,
+                    instance_identifier,
                     sync_pair.title_prefix,
                     sync_pair.title_suffix,
                 )
@@ -414,6 +418,7 @@ class CalendarSynchronizer:
         privacy_label: str = "Busy",
         show_time: bool = False,
         identifier: str = "calsinki",
+        instance_identifier: str = "calsinki",
         title_prefix: str = "",
         title_suffix: str = "",
     ) -> dict[str, Any]:
@@ -436,7 +441,7 @@ class CalendarSynchronizer:
             end_data = {"dateTime": event.end.isoformat()}
 
         # Create Calsinki footer
-        calsinki_footer = f"\n\n---\nEvent added by {identifier.title()} from {source_calendar_name or 'Unknown'} calendar."
+        calsinki_footer = f"\n\n---\nEvent added by {instance_identifier.replace('_', ' ').title()} from {source_calendar_name or 'Unknown'} calendar."
 
         # Create summary with or without time
         if show_time:
@@ -448,8 +453,8 @@ class CalendarSynchronizer:
         extended_properties = {
             "private": {
                 **event.sync_metadata,
-                f"{identifier.split('_')[0]}_synced": "true",  # Instance-level: "calsinki_synced=true"
-                identifier: "true",  # Sync pair-level: "calsinki_demo_to_personal_synced=true"
+                f"{instance_identifier}_synced": "true",  # Instance-level: "mybrand_synced=true"
+                identifier: "true",  # Sync pair-level: "mybrand_demo_sync_synced=true"
             }
         }
 
@@ -506,6 +511,7 @@ class CalendarSynchronizer:
                 privacy_label,
                 show_time,
                 identifier,
+                instance_identifier,
                 title_prefix,
                 title_suffix,
             )
