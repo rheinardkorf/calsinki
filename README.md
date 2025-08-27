@@ -23,7 +23,6 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 ### 🚧 Coming Soon
 
 - **⏰ Sync Timestamps**: Track when each sync pair was last updated
-- **🎨 Event Customization**: Custom prefixes/suffixes and colors for destination events
 - **📊 Sync Analytics**: Monitor sync performance and event statistics
 - **🔍 Smart Filtering**: Advanced event filtering by date, type, and content
 
@@ -97,6 +96,46 @@ Calsinki follows the XDG Base Directory Specification for configuration and data
 
 If you have custom XDG paths set (e.g., `XDG_CONFIG_HOME=~/.config`), Calsinki will respect them automatically. Otherwise, it uses your operating system's default application directories.
 
+## 🎨 Event Customization
+
+Calsinki allows you to customize how synced events appear in your destination calendars:
+
+### Title Customization
+- **Prefix**: Add text before event titles (e.g., `[WORK]`, `TEAM:`)
+- **Suffix**: Add text after event titles (e.g., `(synced)`, `[external]`)
+
+### Event Colors
+You can assign specific colors to synced events using Google Calendar's color IDs:
+
+| Color ID | Color Name | Description |
+|----------|------------|-------------|
+| `"1"` | Lavender | Soft purple |
+| `"2"` | Sage | Muted green |
+| `"3"` | Grape | Rich purple |
+| `"4"` | Flamingo | Bright pink |
+| `"5"` | Banana | Light yellow |
+| `"6"` | Tangerine | Bright orange |
+| `"7"` | Peacock | Teal blue |
+| `"8"` | Graphite | Dark gray |
+| `"9"` | Blueberry | Deep blue |
+| `"10"` | Basil | Forest green |
+| `"11"` | Tomato | Bright red |
+
+**Note**: Leave `event_color` empty (`""`) or omit the field to use the destination calendar's default color.
+
+### Example Configuration
+```yaml
+sync_pairs:
+  - id: "work_to_personal"
+    source_calendar: "work@company.com"
+    destination_calendar: "personal@gmail.com"
+    privacy_mode: "private"
+    title_prefix: "[WORK]"
+    title_suffix: "(synced)"
+    event_color: "3"  # Grape color
+    enabled: true
+```
+
 ## 🏗️ Architecture
 
 Calsinki is built as a Python command-line tool that:
@@ -134,9 +173,9 @@ Calsinki is built as a Python command-line tool that:
 - [x] Event deletion synchronization
 - [x] Purge functionality with safety controls
 - [x] Dry-run mode for safe operations
+- [x] Custom event title prefixes/suffixes per sync pair
+- [x] Destination event color customization per sync pair
 - [ ] Sync timestamps and metadata tracking
-- [ ] Custom event title prefixes/suffixes per sync pair
-- [ ] Destination event color customization per sync pair
 
 ## 🤝 Contributing
 

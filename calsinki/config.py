@@ -45,6 +45,7 @@ class SyncPair:
     )
     title_prefix: str = ""  # Optional prefix to add to destination event titles
     title_suffix: str = ""  # Optional suffix to add to destination event titles
+    event_color: str = ""  # Optional color ID for destination events (Google Calendar color ID)
     enabled: bool = True
 
 
@@ -244,6 +245,7 @@ sync_pairs:
     privacy_mode: "private"  # Strip sensitive details
     title_prefix: "[WORK] "  # Add work prefix to identify source
     title_suffix: " (synced)"  # Add suffix to show it's synced
+    event_color: "11"  # Google Calendar color ID (blue)
     enabled: true
 
   - id: "team_to_family"
@@ -251,6 +253,7 @@ sync_pairs:
     destination_calendar: "family@gmail.com"
     privacy_mode: "public"  # Keep all details
     title_prefix: "TEAM: "  # Add team prefix
+    event_color: "3"  # Google Calendar color ID (green)
     enabled: true
 
 # Logging configuration

@@ -197,6 +197,10 @@ def handle_config_command(args) -> int:
                     title_custom.append(f"suffix: '{pair.title_suffix}'")
                 if title_custom:
                     print(f"    └─ Title: {', '.join(title_custom)}")
+                
+                # Show event color if configured
+                if pair.event_color:
+                    print(f"    └─ Color: {pair.event_color}")
                 print(
                     f"    └─ {source_cal.account_name}:{pair.source_calendar} → {dest_cal.account_name}:{pair.destination_calendar}"
                 )

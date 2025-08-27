@@ -382,6 +382,7 @@ class CalendarSynchronizer:
                     instance_identifier,
                     sync_pair.title_prefix,
                     sync_pair.title_suffix,
+                    sync_pair.event_color,
                 )
 
                 # Check if event already exists in destination
@@ -421,6 +422,7 @@ class CalendarSynchronizer:
         instance_identifier: str = "calsinki",
         title_prefix: str = "",
         title_suffix: str = "",
+        event_color: str = "",
     ) -> dict[str, Any]:
         """Apply privacy rules to an event."""
         # Format dates properly for Google Calendar API
@@ -473,7 +475,8 @@ class CalendarSynchronizer:
             if title_suffix:
                 summary = f"{summary} {title_suffix}"
 
-            return {
+            # Build event data
+            event_data = {
                 "summary": summary,
                 "description": description,
                 "start": start_data,
@@ -482,6 +485,12 @@ class CalendarSynchronizer:
                 "attendees": event.attendees,
                 "extendedProperties": extended_properties,
             }
+            
+            # Add color if specified
+            if event_color:
+                event_data["colorId"] = event_color
+                
+            return event_data
         elif privacy_mode == "private":
             # Remove ALL identifiable details - completely anonymous
             description = calsinki_footer
@@ -492,13 +501,20 @@ class CalendarSynchronizer:
             if title_suffix:
                 summary = f"{summary} {title_suffix}"
 
-            return {
+            # Build event data
+            event_data = {
                 "summary": summary,
                 "description": description,
                 "start": start_data,
                 "end": end_data,
                 "extendedProperties": extended_properties,
             }
+            
+            # Add color if specified
+            if event_color:
+                event_data["colorId"] = event_color
+                
+            return event_data
         else:
             # Default to public for unknown modes
             self.logger.warning(
@@ -514,6 +530,7 @@ class CalendarSynchronizer:
                 instance_identifier,
                 title_prefix,
                 title_suffix,
+                event_color,
             )
 
     def _find_existing_event(
