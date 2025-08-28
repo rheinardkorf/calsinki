@@ -29,13 +29,14 @@ class Calendar:
     description: str | None = None  # Optional description of the calendar
 
 
-@dataclass
-class SyncPair:
-    """Configuration for a source-destination calendar sync pair."""
 
-    id: str  # Unique identifier for this sync pair
-    source_calendar: str  # Calendar ID (not name)
-    destination_calendar: str  # Calendar ID (not name)
+
+
+@dataclass
+class SyncTarget:
+    """Configuration for a single target calendar within a sync rule."""
+
+    calendar_id: str  # Calendar ID (not name)
     privacy_mode: str = (
         "public"  # "public" or "private" - aligns with Google Calendar visibility
     )
@@ -50,12 +51,21 @@ class SyncPair:
 
 
 @dataclass
+class SyncRule:
+    """Configuration for a source calendar sync rule with multiple target calendars."""
+
+    id: str  # Unique identifier for this sync rule
+    source_calendar: str  # Calendar ID (not name)
+    destination: list[SyncTarget] = field(default_factory=list)  # List of target calendars with individual settings
+
+
+@dataclass
 class Config:
     """Main configuration for Calsinki."""
 
     accounts: list[CalendarAccount] = field(default_factory=list)
     calendars: list[Calendar] = field(default_factory=list)
-    sync_pairs: list[SyncPair] = field(default_factory=list)
+    sync_rules: list[SyncRule] = field(default_factory=list)  # Sync rules support
     log_level: str = "INFO"
     log_file: str | None = None
     data_dir: str = "./data"
@@ -89,11 +99,23 @@ class Config:
                 calendar = Calendar(**calendar_data)
                 config.calendars.append(calendar)
 
-        # Load sync pairs
-        if "sync_pairs" in data:
-            for pair_data in data["sync_pairs"]:
-                pair = SyncPair(**pair_data)
-                config.sync_pairs.append(pair)
+        # Load sync rules
+        if "sync_rules" in data:
+            for rule_data in data["sync_rules"]:
+                # Handle nested destination structure
+                destinations = []
+                if "destination" in rule_data:
+                    for dest_data in rule_data["destination"]:
+                        destination = SyncTarget(**dest_data)
+                        destinations.append(destination)
+                
+                # Create rule with destinations
+                rule = SyncRule(
+                    id=rule_data["id"],
+                    source_calendar=rule_data["source_calendar"],
+                    destination=destinations
+                )
+                config.sync_rules.append(rule)
 
         # Load other settings
         if "log_level" in data:
@@ -107,17 +129,19 @@ class Config:
 
         return config
 
-    def get_effective_identifier(self, sync_pair: SyncPair) -> str:
+
+
+    def get_effective_identifier_for_rule(self, sync_rule: SyncRule, target_calendar_id: str) -> str:
         """
-        Get the effective identifier for a sync pair by combining:
-        default_identifier + sync_pair.id + "_synced"
+        Get the effective identifier for a sync rule by combining:
+        default_identifier + sync_rule.id
 
         Examples:
-        - default_identifier: "mybrand", sync_pair.id: "demo_sync" → "mybrand_demo_sync_synced"
-        - default_identifier: "calsinki", sync_pair.id: "work_to_personal" → "calsinki_work_to_personal_synced"
+        - default_identifier: "calsinki", rule.id: "demo_to_personal" 
+          → "calsinki_demo_to_personal"
         """
         default_id = getattr(self, "default_identifier", "calsinki") or "calsinki"
-        return f"{default_id}_{sync_pair.id}_synced"
+        return f"{default_id}_{sync_rule.id}"
 
     def validate(self) -> list[str]:
         """Validate configuration and return list of errors."""
@@ -143,25 +167,26 @@ class Config:
             else:
                 calendar_ids.add(calendar.calendar_id)
 
-        # Validate sync pairs
-        for pair in self.sync_pairs:
+        # Validate sync rules
+        for rule in self.sync_rules:
             # Check that source calendar exists
-            if pair.source_calendar not in calendar_ids:
+            if rule.source_calendar not in calendar_ids:
                 errors.append(
-                    f"Sync pair references unknown source calendar ID: {pair.source_calendar}"
+                    f"Sync rule references unknown source calendar ID: {rule.source_calendar}"
                 )
 
-            # Check that destination calendar exists
-            if pair.destination_calendar not in calendar_ids:
-                errors.append(
-                    f"Sync pair references unknown destination calendar ID: {pair.destination_calendar}"
-                )
+            # Check that all destination calendars exist
+            for target in rule.destination:
+                if target.calendar_id not in calendar_ids:
+                    errors.append(
+                        f"Sync rule '{rule.id}' references unknown destination calendar ID: {target.calendar_id}"
+                    )
 
-            # Check that source and destination are different
-            if pair.source_calendar == pair.destination_calendar:
-                errors.append(
-                    f"Sync pair cannot sync calendar to itself: {pair.source_calendar}"
-                )
+                # Check that source and destination are different
+                if rule.source_calendar == target.calendar_id:
+                    errors.append(
+                        f"Sync rule '{rule.id}' cannot sync calendar to itself: {rule.source_calendar}"
+                    )
 
         return errors
 
@@ -200,6 +225,34 @@ class Config:
         """Get all calendars for a specific account."""
         return [cal for cal in self.calendars if cal.account_name == account_name]
 
+    def get_sync_rule(self, rule_id: str) -> SyncRule | None:
+        """Get sync rule by ID."""
+        for rule in self.sync_rules:
+            if rule.id == rule_id:
+                return rule
+        return None
+
+    def get_enabled_sync_rules(self) -> list[SyncRule]:
+        """Get all sync rules that have at least one enabled destination."""
+        enabled_rules = []
+        for rule in self.sync_rules:
+            if any(target.enabled for target in rule.destination):
+                enabled_rules.append(rule)
+        return enabled_rules
+
+    def get_enabled_targets_for_rule(self, rule_or_id: SyncRule | str) -> list[SyncTarget]:
+        """Get all enabled targets for a specific sync rule."""
+        if isinstance(rule_or_id, str):
+            # If string, treat as rule ID and look it up
+            rule = self.get_sync_rule(rule_or_id)
+        else:
+            # If already a rule object, use it directly
+            rule = rule_or_id
+            
+        if rule:
+            return [target for target in rule.destination if target.enabled]
+        return []
+
 
 def create_example_config() -> str:
     """Create an example configuration file."""
@@ -237,24 +290,22 @@ calendars:
     name: "Family Calendar"
     description: "Shared family events"
 
-# Calendar synchronization pairs
-sync_pairs:
-  - id: "work_to_personal"
-    source_calendar: "work@company.com"
-    destination_calendar: "personal@gmail.com"
-    privacy_mode: "private"  # Strip sensitive details
-    title_prefix: "[WORK] "  # Add work prefix to identify source
-    title_suffix: " (synced)"  # Add suffix to show it's synced
-    event_color: "11"  # Google Calendar color ID (blue)
-    enabled: true
-
-  - id: "team_to_family"
-    source_calendar: "team@company.com"
-    destination_calendar: "family@gmail.com"
-    privacy_mode: "public"  # Keep all details
-    title_prefix: "TEAM: "  # Add team prefix
-    event_color: "3"  # Google Calendar color ID (green)
-    enabled: true
+# Calendar synchronization rules (supports multiple targets per source)
+sync_rules:
+  - id: "demo1"
+    source_calendar: "c_816173434a56d1042220863b4536b7aabeab710be29441b6f17713978480a032@group.calendar.google.com"
+    destination:
+      - calendar_id: "111111@group.calendar.google.com"
+        privacy_mode: "private"
+        privacy_label: "BUSY"
+        title_prefix: "[D1]"
+        enabled: true
+      - calendar_id: "222222@group.calendar.google.com"
+        privacy_mode: "public"
+        privacy_label: "So busy"
+        title_prefix: "[DEMO]"
+        title_suffix: "(sync)"
+        enabled: false
 
 # Logging configuration
 log_level: "INFO"

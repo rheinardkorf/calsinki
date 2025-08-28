@@ -21,11 +21,13 @@ def handle_purge_all_command(
 
         total_deleted = 0
 
-        # Get all destination calendars
+        # Get all destination calendars from sync rules
         dest_calendars = set()
-        for pair in config.sync_pairs:
-            if pair.enabled:
-                dest_cal = config.get_calendar_by_id(pair.destination_calendar)
+        
+        for rule in config.sync_rules:
+            enabled_targets = config.get_enabled_targets_for_rule(rule)
+            for target in enabled_targets:
+                dest_cal = config.get_calendar_by_id(target.calendar_id)
                 if dest_cal:
                     dest_calendars.add(
                         (dest_cal.account_name, dest_cal.calendar_id, dest_cal.name)
@@ -67,80 +69,102 @@ def handle_purge_all_command(
         return 1
 
 
-def handle_purge_pairs_command(
+def handle_purge_rules_command(
     args, config: Config, synchronizer: CalendarSynchronizer
 ) -> int:
-    """Handle purging events from specific sync pairs."""
+    """Handle purging events from specific sync rules."""
     try:
-        # Require explicit sync pair IDs
-        if not args.pairs:
-            print("❌ SAFETY ERROR: No sync pair IDs specified!")
-            print("💡 You must specify which sync pairs to purge:")
-            print("   • calsinki purge sync_pair_1 sync_pair_2")
+        # Require explicit sync rule IDs
+        if not args.rules:
+            print("❌ SAFETY ERROR: No sync rule IDs specified!")
+            print("💡 You must specify which sync rules to purge:")
+            print("   • calsinki purge sync_rule_1 sync_rule_2")
             print("   • Or use --all to purge all events from all calendars")
             return 1
 
-        pairs_to_purge = []
-        for pair_id in args.pairs:
-            pair = next((p for p in config.sync_pairs if p.id == pair_id), None)
-            if pair and pair.enabled:
-                pairs_to_purge.append(pair)
-            elif pair and not pair.enabled:
-                print(f"⚠️  Sync pair '{pair_id}' is disabled - skipping")
+        rules_to_purge = []
+        for rule_id in args.rules:
+            rule = next((r for r in config.sync_rules if r.id == rule_id), None)
+            if rule:
+                enabled_targets = config.get_enabled_targets_for_rule(rule)
+                if enabled_targets:
+                    rules_to_purge.append(rule)
+                else:
+                    print(f"⚠️  Sync rule '{rule_id}' has no enabled targets - skipping")
             else:
-                print(f"❌ Sync pair '{pair_id}' not found")
+                print(f"❌ Sync rule '{rule_id}' not found")
                 return 1
 
-        if not pairs_to_purge:
-            print("❌ No valid sync pairs to purge")
+        if not rules_to_purge:
+            print("❌ No valid sync rules to purge")
             return 1
 
-        print(f"🧹 Purging events from {len(pairs_to_purge)} sync pair(s)...")
+        print(f"🧹 Purging events from {len(rules_to_purge)} sync rule(s)...")
 
         if args.dry_run:
             print("🔍 DRY RUN MODE - No events will be deleted")
 
         total_deleted = 0
 
-        for pair in pairs_to_purge:
-            print(f"\n🔄 Processing sync pair: [{pair.id}]")
+        for rule in rules_to_purge:
+            print(f"\n🔄 Processing sync rule: [{rule.id}]")
 
             try:
-                # Get source and destination calendars
-                source_cal = config.get_calendar_by_id(pair.source_calendar)
-                dest_cal = config.get_calendar_by_id(pair.destination_calendar)
-
-                if not source_cal or not dest_cal:
-                    print(f"❌ Calendar not found for sync pair {pair.id}")
+                # Get source calendar
+                source_cal = config.get_calendar_by_id(rule.source_calendar)
+                if not source_cal:
+                    print(f"❌ Source calendar not found for sync rule {rule.id}")
                     continue
 
-                # Get service for destination account
-                dest_service = synchronizer.calendar_services.get(dest_cal.account_name)
-                if not dest_service:
-                    print(
-                        f"⚠️  No service available for destination account {dest_cal.account_name}"
-                    )
+                # Get enabled targets for this rule
+                enabled_targets = config.get_enabled_targets_for_rule(rule)
+                if not enabled_targets:
+                    print(f"⚠️  No enabled targets for sync rule {rule.id}")
                     continue
 
-                # Generate the sync pair identifier
-                pair_identifier = config.get_effective_identifier(pair)
-                search_property = f"{pair_identifier}=true"
+                print(f"   📅 Source: {source_cal.name} ({source_cal.calendar_id})")
+                print(f"   🎯 Targets: {len(enabled_targets)} enabled destination(s)")
 
-                print(f"   📅 Destination: {dest_cal.name} ({dest_cal.calendar_id})")
-                print(f"   🔍 Searching for: {search_property}")
+                # Process each target
+                for target in enabled_targets:
+                    try:
+                        # Get destination calendar
+                        dest_cal = config.get_calendar_by_id(target.calendar_id)
+                        if not dest_cal:
+                            print(f"      ❌ Destination calendar not found: {target.calendar_id}")
+                            continue
 
-                # Purge events from this calendar
-                deleted_count = purge_events_from_calendar(
-                    dest_service,
-                    dest_cal.calendar_id,
-                    search_property,
-                    dry_run=args.dry_run,
-                    calendar_name=dest_cal.name,
-                )
-                total_deleted += deleted_count
+                        # Get service for destination account
+                        dest_service = synchronizer.calendar_services.get(dest_cal.account_name)
+                        if not dest_service:
+                            print(
+                                f"      ⚠️  No service available for destination account {dest_cal.account_name}"
+                            )
+                            continue
+
+                        # Generate the sync rule identifier for this target
+                        rule_identifier = config.get_effective_identifier_for_rule(rule, target.calendar_id)
+                        search_property = f"{rule_identifier}=true"
+
+                        print(f"      📅 Target: {dest_cal.name} ({dest_cal.calendar_id})")
+                        print(f"      🔍 Searching for: {search_property}")
+
+                        # Purge events from this calendar
+                        deleted_count = purge_events_from_calendar(
+                            dest_service,
+                            dest_cal.calendar_id,
+                            search_property,
+                            dry_run=args.dry_run,
+                            calendar_name=dest_cal.name,
+                        )
+                        total_deleted += deleted_count
+
+                    except Exception as e:
+                        print(f"      ❌ Error processing target {target.calendar_id}: {e}")
+                        continue
 
             except Exception as e:
-                print(f"❌ Error processing sync pair {pair.id}: {e}")
+                print(f"❌ Error processing sync rule {rule.id}: {e}")
                 continue
 
         if args.dry_run:
@@ -151,7 +175,7 @@ def handle_purge_pairs_command(
         return 0
 
     except Exception as e:
-        print(f"❌ Error during purge pairs operation: {e}")
+        print(f"❌ Error during purge items operation: {e}")
         return 1
 
 

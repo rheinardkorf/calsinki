@@ -139,7 +139,7 @@ Calsinki automatically adds comprehensive metadata to all synced events:
 This metadata is stored in the event's extended properties and can be viewed in Google Calendar's event details.
 
 ### Bi-Directional Sync Protection
-Calsinki automatically prevents infinite sync loops when using bi-directional sync pairs. If you set up sync pairs in both directions (e.g., `personal_to_work` and `work_to_personal`), Calsinki will:
+Calsinki automatically prevents infinite sync loops when using bi-directional sync rules. If you set up sync rules in both directions (e.g., `personal_to_work` and `work_to_personal`), Calsinki will:
 
 - **Detect Calsinki-synced events** in source calendars
 - **Skip syncing** events that already have Calsinki metadata
@@ -150,15 +150,16 @@ This ensures safe bi-directional synchronization without manual intervention.
 
 ### Example Configuration
 ```yaml
-sync_pairs:
+sync_rules:
   - id: "work_to_personal"
     source_calendar: "work@company.com"
-    destination_calendar: "personal@gmail.com"
-    privacy_mode: "private"
-    title_prefix: "[WORK]"
-    title_suffix: "(synced)"
-    event_color: "3"  # Grape color
-    enabled: true
+    destination:
+      - calendar_id: "personal@gmail.com"
+        privacy_mode: "private"
+        title_prefix: "[WORK]"
+        title_suffix: "(synced)"
+        event_color: "3"  # Grape color
+        enabled: true
 ```
 
 ## 🏗️ Architecture
@@ -198,8 +199,8 @@ Calsinki is built as a Python command-line tool that:
 - [x] Event deletion synchronization
 - [x] Purge functionality with safety controls
 - [x] Dry-run mode for safe operations
-- [x] Custom event title prefixes/suffixes per sync pair
-- [x] Destination event color customization per sync pair
+- [x] Custom event title prefixes/suffixes per sync target
+- [x] Destination event color customization per sync target
 - [x] Sync timestamps and metadata tracking
 
 ## 🤝 Contributing

@@ -19,7 +19,7 @@ from calsinki.config import (
     get_credentials_dir,
     get_default_config_path,
 )
-from calsinki.purge import handle_purge_all_command, handle_purge_pairs_command
+from calsinki.purge import handle_purge_all_command, handle_purge_rules_command
 from calsinki.sync import CalendarSynchronizer
 
 
@@ -37,14 +37,14 @@ Examples:
   calsinki auth xteam personal     # Authenticate multiple specific accounts
   calsinki sync                    # Run calendar synchronization
   calsinki sync --dry-run          # Preview sync without making changes
-  calsinki sync demo_to_personal   # Sync specific sync pair
-  calsinki sync --list             # List available sync pairs
-  calsinki purge demo_to_personal  # Remove events from specific sync pair
-  calsinki purge --all             # Remove all synced events from all pairs
+  calsinki sync demo_to_personal   # Sync specific sync rule
+  calsinki sync --list             # List available sync rules
+  calsinki purge demo_to_personal  # Remove events from specific sync rule
+  calsinki purge --all             # Remove all synced events from all rules
   calsinki purge --dry-run         # Show what would be purged
   calsinki config                  # Show current configuration
   calsinki config --example        # Show example configuration
-  calsinki --version              # Show version information
+  calsinki --version               # Show version information
         """,
     )
 
@@ -64,14 +64,14 @@ Examples:
     # Sync command
     sync_parser = subparsers.add_parser("sync", help="Synchronize calendars")
     sync_parser.add_argument(
-        "pairs",
+        "rules",
         nargs="*",
-        help="Specific sync pair IDs to sync (default: all enabled pairs)",
+        help="Specific sync rule IDs to sync (default: all enabled rules)",
     )
     sync_parser.add_argument(
         "--list",
         action="store_true",
-        help="List available sync pairs instead of syncing",
+        help="List available sync rules instead of syncing",
     )
     sync_parser.add_argument(
         "--dry-run",
@@ -83,7 +83,7 @@ Examples:
     purge_parser = subparsers.add_parser(
         "purge",
         help="Purge synced events from calendars",
-        description="Remove all events created by Calsinki synchronization. Use --all to purge all events, or specify sync pair IDs for targeted purging.",
+        description="Remove all events created by Calsinki synchronization. Use --all to purge all events, or specify sync rule IDs for targeted purging.",
     )
     purge_parser.add_argument(
         "--all",
@@ -91,9 +91,9 @@ Examples:
         help="Purge ALL events from ALL calendars (REQUIRED for safety)",
     )
     purge_parser.add_argument(
-        "pairs",
+        "rules",
         nargs="*",
-        help="Specific sync pair IDs to purge (REQUIRED unless using --all)",
+        help="Specific sync rule IDs to purge (REQUIRED unless using --all)",
     )
     purge_parser.add_argument(
         "--dry-run",
@@ -179,36 +179,36 @@ def handle_config_command(args) -> int:
                 f"  • {calendar.name} ({calendar.calendar_id}) in account '{calendar.account_name}'{desc}"
             )
 
-        print(f"\n🔄 Sync Pairs ({len(config.sync_pairs)}):")
-        for pair in config.sync_pairs:
-            status = "✅ enabled" if pair.enabled else "❌ disabled"
-            source_cal = config.get_calendar_by_id(pair.source_calendar)
-            dest_cal = config.get_calendar_by_id(pair.destination_calendar)
-
-            if source_cal and dest_cal:
-                print(
-                    f"  • [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode}) - {status}"
-                )
-                # Show title customization if configured
-                title_custom = []
-                if pair.title_prefix:
-                    title_custom.append(f"prefix: '{pair.title_prefix}'")
-                if pair.title_suffix:
-                    title_custom.append(f"suffix: '{pair.title_suffix}'")
-                if title_custom:
-                    print(f"    └─ Title: {', '.join(title_custom)}")
+        # Display sync rules if any exist
+        if config.sync_rules:
+            print(f"\n📋 Sync Rules ({len(config.sync_rules)}):")
+            for rule in config.sync_rules:
+                source_cal = config.get_calendar_by_id(rule.source_calendar)
+                source_name = source_cal.name if source_cal else rule.source_calendar
                 
-                # Show event color if configured
-                if pair.event_color:
-                    print(f"    └─ Color: {pair.event_color}")
-                print(
-                    f"    └─ {source_cal.account_name}:{pair.source_calendar} → {dest_cal.account_name}:{pair.destination_calendar}"
-                )
-            else:
-                print(
-                    f"  • [{pair.id}] {pair.source_calendar} → {pair.destination_calendar} ({pair.privacy_mode}) - {status}"
-                )
-                print("    └─ [Calendar details not found]")
+                print(f"  • [{rule.id}] {source_name} → {len(rule.destination)} destination(s)")
+                
+                for i, target in enumerate(rule.destination):
+                    dest_cal = config.get_calendar_by_id(target.calendar_id)
+                    dest_name = dest_cal.name if dest_cal else target.calendar_id
+                    status = "✅ enabled" if target.enabled else "❌ disabled"
+                    
+                    print(f"    {i+1}. {dest_name} ({target.privacy_mode}) - {status}")
+                    
+                    # Show title customization if configured
+                    title_custom = []
+                    if target.title_prefix:
+                        title_custom.append(f"prefix: '{target.title_prefix}'")
+                    if target.title_suffix:
+                        title_custom.append(f"suffix: '{target.title_suffix}'")
+                    if title_custom:
+                        print(f"       └─ Title: {', '.join(title_custom)}")
+                    
+                    # Show event color if configured
+                    if target.event_color:
+                        print(f"       └─ Color: {target.event_color}")
+                    
+                    print(f"       └─ {target.calendar_id}")
 
         print(f"\n📁 Data Directory: {config.data_dir}")
         print(f"📝 Log Level: {config.log_level}")
@@ -241,53 +241,61 @@ def handle_sync_command(args) -> int:
         config = Config.from_file(args.config)
 
         if args.list:
-            print("🔄 Available Sync Pairs:")
+            print("🔄 Available Sync Rules:")
             print("=" * 50)
-            for pair in config.sync_pairs:
-                status = "✅ enabled" if pair.enabled else "❌ disabled"
-                source_cal = config.get_calendar_by_id(pair.source_calendar)
-                dest_cal = config.get_calendar_by_id(pair.destination_calendar)
-
-                if source_cal and dest_cal:
-                    print(
-                        f"  [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode}) - {status}"
-                    )
-                else:
-                    print(
-                        f"  [{pair.id}] {pair.source_calendar} → {pair.destination_calendar} ({pair.privacy_mode}) - {status}"
-                    )
+            
+            # Show sync rules
+            if config.sync_rules:
+                for rule in config.sync_rules:
+                    source_cal = config.get_calendar_by_id(rule.source_calendar)
+                    enabled_targets = [t for t in rule.destination if t.enabled]
+                    total_targets = len(rule.destination)
+                    
+                    if source_cal:
+                        print(f"  [{rule.id}] {source_cal.name} → {len(enabled_targets)}/{total_targets} destination(s)")
+                        for i, target in enumerate(rule.destination):
+                            dest_cal = config.get_calendar_by_id(target.calendar_id)
+                            dest_name = dest_cal.name if dest_cal else target.calendar_id
+                            status = "✅ enabled" if target.enabled else "❌ disabled"
+                            print(f"    {i+1}. {dest_name} ({target.privacy_mode}) - {status}")
+                    else:
+                        print(f"  [{rule.id}] {rule.source_calendar} → {len(enabled_targets)}/{total_targets} destination(s)")
+            else:
+                print("  No sync rules configured")
+                
             return 0
 
-        # Determine which pairs to sync
-        if args.pairs:
-            # Sync specific pairs by ID
-            pairs_to_sync = []
-            for pair_id in args.pairs:
-                pair = next((p for p in config.sync_pairs if p.id == pair_id), None)
-                if pair:
-                    if pair.enabled:
-                        pairs_to_sync.append(pair)
+        # Determine which sync operations to perform
+        if args.rules:
+            # Sync specific rules by ID
+            rules_to_sync = []
+            
+            for rule_id in args.rules:
+                rule = next((r for r in config.sync_rules if r.id == rule_id), None)
+                if rule:
+                    enabled_targets = [t for t in rule.destination if t.enabled]
+                    if enabled_targets:
+                        rules_to_sync.append(rule)
                     else:
-                        print(f"⚠️  Sync pair '{pair_id}' is disabled, skipping")
+                        print(f"⚠️  Sync rule '{rule_id}' has no enabled destinations, skipping")
                 else:
-                    print(f"❌ Sync pair '{pair_id}' not found")
+                    print(f"❌ Sync rule '{rule_id}' not found")
                     return 1
 
-            if not pairs_to_sync:
-                print("❌ No valid sync pairs to process")
+            if not rules_to_sync:
+                print("❌ No valid sync rules to process")
                 return 1
 
-            print(
-                f"🔄 Syncing {len(pairs_to_sync)} specific pair(s): {', '.join(p.id for p in pairs_to_sync)}"
-            )
+            print(f"🔄 Syncing {len(rules_to_sync)} specific rule(s): {', '.join(args.rules)}")
         else:
-            # Sync all enabled pairs
-            pairs_to_sync = [p for p in config.sync_pairs if p.enabled]
-            if not pairs_to_sync:
-                print("❌ No enabled sync pairs found")
+            # Sync all enabled rules
+            rules_to_sync = config.get_enabled_sync_rules()
+            
+            if not rules_to_sync:
+                print("❌ No enabled sync rules found")
                 return 1
 
-            print(f"🔄 Syncing all {len(pairs_to_sync)} enabled pair(s)")
+            print(f"🔄 Syncing all {len(rules_to_sync)} enabled rule(s)")
 
         # Perform actual synchronization
         if args.dry_run:
@@ -299,23 +307,23 @@ def handle_sync_command(args) -> int:
         # Initialize the synchronizer
         synchronizer = CalendarSynchronizer(config)
 
-        # Sync each pair
-        for pair in pairs_to_sync:
-            source_cal = config.get_calendar_by_id(pair.source_calendar)
-            dest_cal = config.get_calendar_by_id(pair.destination_calendar)
+        # Sync each rule
+        for rule in rules_to_sync:
+            source_cal = config.get_calendar_by_id(rule.source_calendar)
+            enabled_targets = [t for t in rule.destination if t.enabled]
 
-            if source_cal and dest_cal:
+            if source_cal and enabled_targets:
                 if args.dry_run:
                     print(
-                        f"\n🔍 DRY RUN: Would sync [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})"
+                        f"\n🔍 DRY RUN: Would sync rule [{rule.id}] {source_cal.name} → {len(enabled_targets)} destination(s)"
                     )
                 else:
                     print(
-                        f"\n🔄 Syncing [{pair.id}] {source_cal.name} → {dest_cal.name} ({pair.privacy_mode})"
+                        f"\n🔄 Syncing rule [{rule.id}] {source_cal.name} → {len(enabled_targets)} destination(s)"
                     )
 
                 # Perform the sync (with dry-run support)
-                success = synchronizer.sync_pair(pair, dry_run=args.dry_run)
+                success = synchronizer.sync_rule(rule, dry_run=args.dry_run)
 
                 if success:
                     if args.dry_run:
@@ -325,7 +333,7 @@ def handle_sync_command(args) -> int:
                 else:
                     print("  ❌ Sync failed")
             else:
-                print(f"  ❌ [{pair.id}] Calendar details not found")
+                print(f"  ❌ [{rule.id}] Calendar details not found or no enabled destinations")
 
         if args.dry_run:
             print("\n🔍 DRY RUN COMPLETE - No changes were made to calendars")
@@ -430,12 +438,12 @@ def handle_purge_command(args) -> int:
     try:
         print("🗑️  Starting event purge operation...")
 
-        # Safety check: require explicit --all or specific sync pair IDs
-        if not args.all and not args.pairs:
+        # Safety check: require explicit --all or specific sync rule IDs
+        if not args.all and not args.rules:
             print("❌ SAFETY ERROR: No purge target specified!")
             print("💡 You must either:")
             print("   • Use --all to purge ALL events from ALL calendars")
-            print("   • Specify sync pair IDs: calsinki purge sync_pair_1 sync_pair_2")
+            print("   • Specify sync rule IDs: calsinki purge sync_rule_1 sync_rule_2")
             print("💡 This prevents accidental deletion of all synced events.")
             return 1
 
@@ -456,8 +464,8 @@ def handle_purge_command(args) -> int:
             # Purge all events using default identifier
             return handle_purge_all_command(args, config, synchronizer)
         else:
-            # Purge specific sync pairs
-            return handle_purge_pairs_command(args, config, synchronizer)
+            # Purge specific sync rules
+            return handle_purge_rules_command(args, config, synchronizer)
 
     except Exception as e:
         print(f"❌ Error during purge operation: {e}")
