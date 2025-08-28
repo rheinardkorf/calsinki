@@ -34,22 +34,25 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 
 1. **Clone and Setup**: `git clone <repo>` then `uv venv` and `source .venv/bin/activate`
 2. **Install Dependencies**: `uv sync` to install all required packages
-3. **Initialize**: `calsinki init` to create your configuration structure
-4. **Configure**: Edit the generated config file with your calendar details
-5. **Authenticate**: `calsinki auth <account_name>` to set up Google Calendar access
-6. **Sync**: `calsinki sync` or `calsinki sync <pair_id>` to start calendar synchronization
+3. **GCP Setup**: Follow the [GCP Setup Guide](docs/GCP_SETUP.md) to configure Google Cloud Platform and OAuth2
+4. **Initialize**: `calsinki init` to create your configuration structure
+5. **Configure**: Edit the generated config file with your calendar details
+6. **Authenticate**: `calsinki auth <account_name>` to set up Google Calendar access
+7. **Sync**: `calsinki sync` or `calsinki sync <pair_id>` to start calendar synchronization
 
 ## 🎮 Command Reference
 
 ### Core Commands
 ```bash
 calsinki init                    # Initialize configuration structure
-calsinki auth --setup            # Set up OAuth2 configuration
+calsinki auth --setup            # Set up OAuth2 configuration (requires GCP setup first)
 calsinki auth                    # Authenticate all accounts
 calsinki auth personal           # Authenticate specific account
 calsinki config                  # Show current configuration
 calsinki config --example        # Show example configuration
 ```
+
+**Note**: Before running `calsinki auth --setup`, you must complete the [GCP Setup Guide](docs/GCP_SETUP.md) to configure Google Cloud Platform and OAuth2 credentials.
 
 ### Synchronization
 ```bash
