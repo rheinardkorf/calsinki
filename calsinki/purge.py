@@ -23,15 +23,19 @@ def handle_purge_all_command(
 
         # Get all destination calendars from sync rules
         dest_calendars = set()
-        
+
         for rule in config.sync_rules:
             enabled_targets = config.get_enabled_targets_for_rule(rule)
             for target in enabled_targets:
-                dest_cal = config.get_calendar_by_id(target.calendar_id)
+                dest_cal = config.get_calendar_by_label(target.calendar)
                 if dest_cal:
-                    dest_calendars.add(
-                        (dest_cal.account_name, dest_cal.calendar_id, dest_cal.name)
+                    account_name = config.get_account_name_for_calendar(
+                        dest_cal.calendar_id
                     )
+                    if account_name:
+                        dest_calendars.add(
+                            (account_name, dest_cal.calendar_id, dest_cal.name)
+                        )
 
         for account_name, calendar_id, calendar_name in dest_calendars:
             print(f"\n📅 Processing calendar: {calendar_name} ({calendar_id})")
@@ -111,7 +115,7 @@ def handle_purge_rules_command(
 
             try:
                 # Get source calendar
-                source_cal = config.get_calendar_by_id(rule.source_calendar)
+                source_cal = config.get_calendar_by_label(rule.source_calendar)
                 if not source_cal:
                     print(f"❌ Source calendar not found for sync rule {rule.id}")
                     continue
@@ -129,24 +133,41 @@ def handle_purge_rules_command(
                 for target in enabled_targets:
                     try:
                         # Get destination calendar
-                        dest_cal = config.get_calendar_by_id(target.calendar_id)
+                        dest_cal = config.get_calendar_by_label(target.calendar)
                         if not dest_cal:
-                            print(f"      ❌ Destination calendar not found: {target.calendar_id}")
+                            print(
+                                f"      ❌ Destination calendar not found: {target.calendar}"
+                            )
                             continue
 
                         # Get service for destination account
-                        dest_service = synchronizer.calendar_services.get(dest_cal.account_name)
+                        dest_account_name = config.get_account_name_for_calendar(
+                            dest_cal.calendar_id
+                        )
+                        if not dest_account_name:
+                            print(
+                                f"      ❌ Could not determine account for destination calendar: {dest_cal.calendar_id}"
+                            )
+                            continue
+
+                        dest_service = synchronizer.calendar_services.get(
+                            dest_account_name
+                        )
                         if not dest_service:
                             print(
-                                f"      ⚠️  No service available for destination account {dest_cal.account_name}"
+                                f"      ⚠️  No service available for destination account {dest_account_name}"
                             )
                             continue
 
                         # Generate the sync rule identifier for this target
-                        rule_identifier = config.get_effective_identifier_for_rule(rule, target.calendar_id)
+                        rule_identifier = config.get_effective_identifier_for_rule(
+                            rule, target.calendar
+                        )
                         search_property = f"{rule_identifier}=true"
 
-                        print(f"      📅 Target: {dest_cal.name} ({dest_cal.calendar_id})")
+                        print(
+                            f"      📅 Target: {dest_cal.name} ({dest_cal.calendar_id})"
+                        )
                         print(f"      🔍 Searching for: {search_property}")
 
                         # Purge events from this calendar
@@ -160,7 +181,9 @@ def handle_purge_rules_command(
                         total_deleted += deleted_count
 
                     except Exception as e:
-                        print(f"      ❌ Error processing target {target.calendar_id}: {e}")
+                        print(
+                            f"      ❌ Error processing target {target.calendar}: {e}"
+                        )
                         continue
 
             except Exception as e:

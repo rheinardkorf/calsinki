@@ -75,9 +75,7 @@ def purge_reclaim_events(dry_run: bool = True, force: bool = False):
                 print(f"✅ Authenticated with Google Calendar API")
                 
                 # Check each calendar in this account
-                for calendar in config.calendars:
-                    if calendar.account_name != account.name:
-                        continue
+                for calendar in account.calendars:
                     
                     print(f"  📋 Calendar: {calendar.name} ({calendar.calendar_id})")
                     

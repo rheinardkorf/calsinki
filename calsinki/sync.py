@@ -157,20 +157,29 @@ class CalendarSynchronizer:
                     f"❌ Failed to initialize service for {account.name}: {e}"
                 )
 
-
-
     def sync_rule(self, sync_rule: SyncRule, dry_run: bool = False) -> bool:
         """Synchronize a single sync rule to all its enabled destinations."""
         try:
             # Get source calendar
-            source_cal = self.config.get_calendar_by_id(sync_rule.source_calendar)
+            source_cal = self.config.get_calendar_by_label(sync_rule.source_calendar)
 
             if not source_cal:
-                self.logger.error(f"❌ Source calendar not found for sync rule {sync_rule.id}")
+                self.logger.error(
+                    f"❌ Source calendar not found for sync rule {sync_rule.id}"
+                )
                 return False
 
             # Get calendar service for source
-            source_service = self.calendar_services.get(source_cal.account_name)
+            source_account_name = self.config.get_account_name_for_calendar(
+                source_cal.calendar_id
+            )
+            if not source_account_name:
+                self.logger.error(
+                    f"❌ Could not determine account for source calendar: {source_cal.calendar_id}"
+                )
+                return False
+
+            source_service = self.calendar_services.get(source_account_name)
 
             if not source_service:
                 self.logger.error(
@@ -179,17 +188,23 @@ class CalendarSynchronizer:
                 return False
 
             # Get enabled destinations
-            enabled_targets = [target for target in sync_rule.destination if target.enabled]
-            
+            enabled_targets = [
+                target for target in sync_rule.destination if target.enabled
+            ]
+
             if not enabled_targets:
-                self.logger.info(f"ℹ️  No enabled destinations for sync rule {sync_rule.id}")
+                self.logger.info(
+                    f"ℹ️  No enabled destinations for sync rule {sync_rule.id}"
+                )
                 return True
 
             if dry_run:
                 self.logger.info(
                     f"🔍 DRY RUN: Would sync {source_cal.name} → {len(enabled_targets)} destination(s)"
                 )
-                print(f"🔍 DRY RUN: Would sync {source_cal.name} → {len(enabled_targets)} destination(s)")
+                print(
+                    f"🔍 DRY RUN: Would sync {source_cal.name} → {len(enabled_targets)} destination(s)"
+                )
             else:
                 self.logger.info(
                     f"🔄 Starting sync rule: {source_cal.name} → {len(enabled_targets)} destination(s)"
@@ -208,24 +223,43 @@ class CalendarSynchronizer:
             for target in enabled_targets:
                 try:
                     # Get destination calendar
-                    dest_cal = self.config.get_calendar_by_id(target.calendar_id)
+                    dest_cal = self.config.get_calendar_by_label(target.calendar)
                     if not dest_cal:
-                        self.logger.error(f"❌ Destination calendar not found: {target.calendar_id}")
+                        self.logger.error(
+                            f"❌ Destination calendar not found: {target.calendar}"
+                        )
                         continue
 
                     # Get calendar service for destination
-                    dest_service = self.calendar_services.get(dest_cal.account_name)
+                    dest_account_name = self.config.get_account_name_for_calendar(
+                        dest_cal.calendar_id
+                    )
+                    if not dest_account_name:
+                        self.logger.error(
+                            f"❌ Could not determine account for destination calendar: {dest_cal.calendar_id}"
+                        )
+                        continue
+
+                    dest_service = self.calendar_services.get(dest_account_name)
                     if not dest_service:
-                        self.logger.error(f"❌ Calendar service not available for destination: {dest_cal.account_name}")
+                        self.logger.error(
+                            f"❌ Calendar service not available for destination account: {dest_account_name}"
+                        )
                         continue
 
                     if dry_run:
-                        print(f"🔍 DRY RUN: Would sync to {dest_cal.name} ({target.privacy_mode})")
+                        print(
+                            f"🔍 DRY RUN: Would sync to {dest_cal.name} ({target.privacy_mode})"
+                        )
                     else:
                         print(f"🔄 Syncing to {dest_cal.name} ({target.privacy_mode})")
 
                     # Fetch existing synced events from destination calendar
-                    effective_identifier = self.config.get_effective_identifier_for_rule(sync_rule, target.calendar_id)
+                    effective_identifier = (
+                        self.config.get_effective_identifier_for_rule(
+                            sync_rule, target.calendar
+                        )
+                    )
                     existing_synced_events = self._find_synced_events_by_search(
                         dest_service,
                         dest_cal.calendar_id,
@@ -233,32 +267,46 @@ class CalendarSynchronizer:
                         effective_identifier,
                     )
 
-                    print(f"🔍 Found {len(existing_synced_events)} existing synced events in {dest_cal.name}")
+                    print(
+                        f"🔍 Found {len(existing_synced_events)} existing synced events in {dest_cal.name}"
+                    )
                     self.logger.info(
                         f"📅 Found {len(existing_synced_events)} existing synced events in destination calendar {dest_cal.name}"
                     )
 
                     if dry_run:
                         # In dry-run mode, simulate the sync process
-                        print(f"🔍 DRY RUN: Would sync {len(source_events)} events to {dest_cal.name}")
-                        print(f"🔍 DRY RUN: Would check {len(existing_synced_events)} existing events for updates/deletions")
-                        
+                        print(
+                            f"🔍 DRY RUN: Would sync {len(source_events)} events to {dest_cal.name}"
+                        )
+                        print(
+                            f"🔍 DRY RUN: Would check {len(existing_synced_events)} existing events for updates/deletions"
+                        )
+
                         # Simulate the loop prevention check
                         skipped_count = 0
                         events_to_sync = []
-                        
+
                         for event in source_events:
-                            if self._is_calsinki_synced_event(event, self.config.default_identifier):
-                                print(f"🔍 DRY RUN: ⏭️  Would skip '{event.summary}' - already synced by Calsinki")
+                            if self._is_calsinki_synced_event(
+                                event, self.config.default_identifier
+                            ):
+                                print(
+                                    f"🔍 DRY RUN: ⏭️  Would skip '{event.summary}' - already synced by Calsinki"
+                                )
                                 skipped_count += 1
                             else:
                                 events_to_sync.append(event)
 
                         if events_to_sync:
-                            print(f"🔍 DRY RUN: {len(events_to_sync)} events would be synced to {dest_cal.name}")
+                            print(
+                                f"🔍 DRY RUN: {len(events_to_sync)} events would be synced to {dest_cal.name}"
+                            )
                         if skipped_count > 0:
-                            print(f"🔍 DRY RUN: {skipped_count} events would be skipped due to loop prevention")
-                        
+                            print(
+                                f"🔍 DRY RUN: {skipped_count} events would be skipped due to loop prevention"
+                            )
+
                         continue
 
                     # Apply privacy rules and sync to destination
@@ -268,20 +316,24 @@ class CalendarSynchronizer:
                         dest_cal.calendar_id,
                         target.privacy_mode,
                         target.privacy_label,
-                        sync_rule,   # Pass sync_rule
-                        target,      # target
+                        sync_rule,  # Pass sync_rule
+                        target,  # target
                     )
 
                     # Handle deletions - remove events that no longer exist in source
                     print(f"🔍 Starting deletion check for {dest_cal.name}...")
-                    self.logger.info(f"🔍 Starting deletion check for {dest_cal.name}...")
+                    self.logger.info(
+                        f"🔍 Starting deletion check for {dest_cal.name}..."
+                    )
                     deleted_count = self._handle_deletions(
                         source_events,
                         existing_synced_events,
                         dest_service,
                         dest_cal.calendar_id,
                     )
-                    print(f"🔍 Deletion check completed for {dest_cal.name}: {deleted_count} deletions")
+                    print(
+                        f"🔍 Deletion check completed for {dest_cal.name}: {deleted_count} deletions"
+                    )
                     self.logger.info(
                         f"🔍 Deletion check completed for {dest_cal.name}: {deleted_count} deletions"
                     )
@@ -294,16 +346,22 @@ class CalendarSynchronizer:
                     )
 
                 except Exception as e:
-                    self.logger.error(f"❌ Failed to sync to destination {target.calendar_id}: {e}")
+                    self.logger.error(
+                        f"❌ Failed to sync to destination {target.calendar}: {e}"
+                    )
                     continue
 
             if dry_run:
-                print(f"🔍 DRY RUN COMPLETE: Would sync {len(source_events)} events to {len(enabled_targets)} destinations")
+                print(
+                    f"🔍 DRY RUN COMPLETE: Would sync {len(source_events)} events to {len(enabled_targets)} destinations"
+                )
             else:
                 self.logger.info(
                     f"✅ Sync rule {sync_rule.id} completed: {total_synced} events synced, {total_deleted} events deleted across {len(enabled_targets)} destinations"
                 )
-                print(f"✅ Sync rule {sync_rule.id} completed: {total_synced} events synced, {total_deleted} events deleted")
+                print(
+                    f"✅ Sync rule {sync_rule.id} completed: {total_synced} events synced, {total_deleted} events deleted"
+                )
 
             return True
 
@@ -419,25 +477,33 @@ class CalendarSynchronizer:
 
                 # Get the effective identifier for this sync operation
                 if sync_rule and target:
-                    effective_identifier = self.config.get_effective_identifier_for_rule(sync_rule, target.calendar_id)
+                    effective_identifier = (
+                        self.config.get_effective_identifier_for_rule(
+                            sync_rule, target.calendar
+                        )
+                    )
                 else:
                     effective_identifier = "calsinki_synced"
-                
+
                 # Get the instance-level identifier (without sync pair suffix)
-                instance_identifier = getattr(self.config, "default_identifier", "calsinki") or "calsinki"
+                instance_identifier = (
+                    getattr(self.config, "default_identifier", "calsinki") or "calsinki"
+                )
 
                 # Check if this source event is already a Calsinki-synced event to prevent loops
                 if self._is_calsinki_synced_event(event, instance_identifier):
                     skip_msg = f"⏭️  Skipping {event.summary} - already synced by Calsinki (prevents bi-directional sync loops)"
                     self.logger.info(skip_msg)
                     continue
-                
+
                 # Debug: Log what metadata the event has
-                self.logger.debug(f"Event '{event.summary}' metadata: {event.sync_metadata}")
+                self.logger.debug(
+                    f"Event '{event.summary}' metadata: {event.sync_metadata}"
+                )
 
                 # Update the last_synced timestamp for this sync operation
                 event.sync_metadata["last_synced"] = datetime.now(UTC).isoformat()
-                
+
                 # Increment sync count
                 current_sync_count = event.sync_metadata.get("sync_count", 0)
                 event.sync_metadata["sync_count"] = current_sync_count + 1
@@ -533,8 +599,12 @@ class CalendarSynchronizer:
                 **event.sync_metadata,
                 f"{instance_identifier}_synced": "true",  # Instance-level: "mybrand_synced=true"
                 identifier: "true",  # Sync pair-level: "mybrand_demo_sync_synced=true"
-                "last_sync_human": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),  # Human-readable timestamp
-                "sync_count": event.sync_metadata.get("sync_count", 1),  # Number of times this event has been synced
+                "last_sync_human": datetime.now(UTC).strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                ),  # Human-readable timestamp
+                "sync_count": event.sync_metadata.get(
+                    "sync_count", 1
+                ),  # Number of times this event has been synced
             }
         }
 
@@ -563,11 +633,11 @@ class CalendarSynchronizer:
                 "attendees": event.attendees,
                 "extendedProperties": extended_properties,
             }
-            
+
             # Add color if specified
             if event_color:
                 event_data["colorId"] = event_color
-                
+
             return event_data
         elif privacy_mode == "private":
             # Remove ALL identifiable details - completely anonymous
@@ -587,11 +657,11 @@ class CalendarSynchronizer:
                 "end": end_data,
                 "extendedProperties": extended_properties,
             }
-            
+
             # Add color if specified
             if event_color:
                 event_data["colorId"] = event_color
-                
+
             return event_data
         else:
             # Default to public for unknown modes
@@ -620,13 +690,13 @@ class CalendarSynchronizer:
             # This allows us to find events even when the time has changed
             source_event_id = source_event.event_id
             source_calendar_id = source_event.sync_metadata["source_calendar_id"]
-            
+
             # Search for events with the source event ID in their metadata
             # We'll search in a broader time range to catch events that may have moved
             # Search in a wider time range (e.g., ±24 hours) to catch moved events
             time_min = (source_event.start - timedelta(hours=24)).isoformat()
             time_max = (source_event.end + timedelta(hours=24)).isoformat()
-            
+
             events_result = (
                 service.events()
                 .list(
@@ -652,10 +722,14 @@ class CalendarSynchronizer:
                         metadata.get("source_event_id") == source_event_id
                         and metadata.get("source_calendar_id") == source_calendar_id
                     ):
-                        self.logger.info(f"✅ Found existing event to update: {event.get('summary', 'Unknown')} (ID: {event.get('id', 'Unknown')})")
+                        self.logger.info(
+                            f"✅ Found existing event to update: {event.get('summary', 'Unknown')} (ID: {event.get('id', 'Unknown')})"
+                        )
                         return event
 
-            self.logger.info(f"ℹ️  No existing event found for source event {source_event_id}")
+            self.logger.info(
+                f"ℹ️  No existing event found for source event {source_event_id}"
+            )
             return None
 
         except Exception as e:
@@ -705,35 +779,43 @@ class CalendarSynchronizer:
 
         return configured_privacy_mode
 
-    def _is_calsinki_synced_event(self, event: CalendarEvent, instance_identifier: str) -> bool:
+    def _is_calsinki_synced_event(
+        self, event: CalendarEvent, instance_identifier: str
+    ) -> bool:
         """
         Check if an event is already a Calsinki-synced event to prevent bi-directional sync loops.
-        
+
         Args:
             event: The CalendarEvent to check
             instance_identifier: The instance identifier (e.g., "calsinki", "my_brand")
-            
+
         Returns:
             True if the event is already synced by Calsinki, False otherwise
         """
         # Check the original Google Calendar event's extended properties
-        if hasattr(event, 'original_event') and event.original_event:
+        if hasattr(event, "original_event") and event.original_event:
             original_event = event.original_event
-            
+
             # Check if the event has extended properties with Calsinki identifiers
-            if "extendedProperties" in original_event and "private" in original_event["extendedProperties"]:
+            if (
+                "extendedProperties" in original_event
+                and "private" in original_event["extendedProperties"]
+            ):
                 private_props = original_event["extendedProperties"]["private"]
-                
+
                 # Check for the instance-level identifier (e.g., "calsinki_synced=true")
                 instance_synced_key = f"{instance_identifier}_synced"
-                if instance_synced_key in private_props and private_props[instance_synced_key] == "true":
+                if (
+                    instance_synced_key in private_props
+                    and private_props[instance_synced_key] == "true"
+                ):
                     return True
-                    
+
                 # Check for any sync pair identifier (e.g., "calsinki_demo_to_personal_synced=true")
                 for key in private_props.keys():
                     if key.endswith("_synced") and private_props[key] == "true":
                         return True
-        
+
         return False
 
     def _fetch_synced_events(

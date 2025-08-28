@@ -171,30 +171,31 @@ def handle_config_command(args) -> int:
         print(f"📊 Accounts ({len(config.accounts)}):")
         for account in config.accounts:
             print(f"  • {account.name} ({account.email}) - {account.auth_type}")
-
-        print(f"\n📅 Calendars ({len(config.calendars)}):")
-        for calendar in config.calendars:
-            desc = f" - {calendar.description}" if calendar.description else ""
-            print(
-                f"  • {calendar.name} ({calendar.calendar_id}) in account '{calendar.account_name}'{desc}"
-            )
+            if account.calendars:
+                for calendar in account.calendars:
+                    desc = f" - {calendar.description}" if calendar.description else ""
+                    print(f"    └─ {calendar.name} ({calendar.calendar_id}){desc}")
+            else:
+                print("    └─ No calendars configured")
 
         # Display sync rules if any exist
         if config.sync_rules:
             print(f"\n📋 Sync Rules ({len(config.sync_rules)}):")
             for rule in config.sync_rules:
-                source_cal = config.get_calendar_by_id(rule.source_calendar)
+                source_cal = config.get_calendar_by_label(rule.source_calendar)
                 source_name = source_cal.name if source_cal else rule.source_calendar
-                
-                print(f"  • [{rule.id}] {source_name} → {len(rule.destination)} destination(s)")
-                
+
+                print(
+                    f"  • [{rule.id}] {source_name} → {len(rule.destination)} destination(s)"
+                )
+
                 for i, target in enumerate(rule.destination):
-                    dest_cal = config.get_calendar_by_id(target.calendar_id)
-                    dest_name = dest_cal.name if dest_cal else target.calendar_id
+                    dest_cal = config.get_calendar_by_label(target.calendar)
+                    dest_name = dest_cal.name if dest_cal else target.calendar
                     status = "✅ enabled" if target.enabled else "❌ disabled"
-                    
+
                     print(f"    {i+1}. {dest_name} ({target.privacy_mode}) - {status}")
-                    
+
                     # Show title customization if configured
                     title_custom = []
                     if target.title_prefix:
@@ -203,12 +204,12 @@ def handle_config_command(args) -> int:
                         title_custom.append(f"suffix: '{target.title_suffix}'")
                     if title_custom:
                         print(f"       └─ Title: {', '.join(title_custom)}")
-                    
+
                     # Show event color if configured
                     if target.event_color:
                         print(f"       └─ Color: {target.event_color}")
-                    
-                    print(f"       └─ {target.calendar_id}")
+
+                    print(f"       └─ {target.calendar}")
 
         print(f"\n📁 Data Directory: {config.data_dir}")
         print(f"📝 Log Level: {config.log_level}")
@@ -243,33 +244,39 @@ def handle_sync_command(args) -> int:
         if args.list:
             print("🔄 Available Sync Rules:")
             print("=" * 50)
-            
+
             # Show sync rules
             if config.sync_rules:
                 for rule in config.sync_rules:
-                    source_cal = config.get_calendar_by_id(rule.source_calendar)
+                    source_cal = config.get_calendar_by_label(rule.source_calendar)
                     enabled_targets = [t for t in rule.destination if t.enabled]
                     total_targets = len(rule.destination)
-                    
+
                     if source_cal:
-                        print(f"  [{rule.id}] {source_cal.name} → {len(enabled_targets)}/{total_targets} destination(s)")
+                        print(
+                            f"  [{rule.id}] {source_cal.name} → {len(enabled_targets)}/{total_targets} destination(s)"
+                        )
                         for i, target in enumerate(rule.destination):
-                            dest_cal = config.get_calendar_by_id(target.calendar_id)
-                            dest_name = dest_cal.name if dest_cal else target.calendar_id
+                            dest_cal = config.get_calendar_by_label(target.calendar)
+                            dest_name = dest_cal.name if dest_cal else target.calendar
                             status = "✅ enabled" if target.enabled else "❌ disabled"
-                            print(f"    {i+1}. {dest_name} ({target.privacy_mode}) - {status}")
+                            print(
+                                f"    {i+1}. {dest_name} ({target.privacy_mode}) - {status}"
+                            )
                     else:
-                        print(f"  [{rule.id}] {rule.source_calendar} → {len(enabled_targets)}/{total_targets} destination(s)")
+                        print(
+                            f"  [{rule.id}] {rule.source_calendar} → {len(enabled_targets)}/{total_targets} destination(s)"
+                        )
             else:
                 print("  No sync rules configured")
-                
+
             return 0
 
         # Determine which sync operations to perform
         if args.rules:
             # Sync specific rules by ID
             rules_to_sync = []
-            
+
             for rule_id in args.rules:
                 rule = next((r for r in config.sync_rules if r.id == rule_id), None)
                 if rule:
@@ -277,7 +284,9 @@ def handle_sync_command(args) -> int:
                     if enabled_targets:
                         rules_to_sync.append(rule)
                     else:
-                        print(f"⚠️  Sync rule '{rule_id}' has no enabled destinations, skipping")
+                        print(
+                            f"⚠️  Sync rule '{rule_id}' has no enabled destinations, skipping"
+                        )
                 else:
                     print(f"❌ Sync rule '{rule_id}' not found")
                     return 1
@@ -286,11 +295,13 @@ def handle_sync_command(args) -> int:
                 print("❌ No valid sync rules to process")
                 return 1
 
-            print(f"🔄 Syncing {len(rules_to_sync)} specific rule(s): {', '.join(args.rules)}")
+            print(
+                f"🔄 Syncing {len(rules_to_sync)} specific rule(s): {', '.join(args.rules)}"
+            )
         else:
             # Sync all enabled rules
             rules_to_sync = config.get_enabled_sync_rules()
-            
+
             if not rules_to_sync:
                 print("❌ No enabled sync rules found")
                 return 1
@@ -309,7 +320,7 @@ def handle_sync_command(args) -> int:
 
         # Sync each rule
         for rule in rules_to_sync:
-            source_cal = config.get_calendar_by_id(rule.source_calendar)
+            source_cal = config.get_calendar_by_label(rule.source_calendar)
             enabled_targets = [t for t in rule.destination if t.enabled]
 
             if source_cal and enabled_targets:
@@ -333,7 +344,9 @@ def handle_sync_command(args) -> int:
                 else:
                     print("  ❌ Sync failed")
             else:
-                print(f"  ❌ [{rule.id}] Calendar details not found or no enabled destinations")
+                print(
+                    f"  ❌ [{rule.id}] Calendar details not found or no enabled destinations"
+                )
 
         if args.dry_run:
             print("\n🔍 DRY RUN COMPLETE - No changes were made to calendars")

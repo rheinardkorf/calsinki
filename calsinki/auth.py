@@ -9,7 +9,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from .config import get_config_dir, get_credentials_path, get_oauth2_config_path
+from .config import get_credentials_path, get_oauth2_config_path
 
 
 @dataclass
