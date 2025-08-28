@@ -29,6 +29,9 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 - **Automated**: Set it and forget it with cron or systemd timers
 - **Safe operations**: Dry-run mode prevents accidental changes
 - **Complete lifecycle**: Handles creation, updates, and deletion of events
+- **Modern architecture**: Clean, nested configuration with human-readable labels
+- **Flexible sync**: One source calendar can sync to multiple destinations
+- **Maintainable**: Easy to update and extend without breaking existing setups
 
 ## 🚀 Getting Started
 
@@ -38,7 +41,7 @@ Calsinki is your personal calendar conductor, orchestrating events between multi
 4. **Initialize**: `calsinki init` to create your configuration structure
 5. **Configure**: Edit the generated config file with your calendar details
 6. **Authenticate**: `calsinki auth <account_name>` to set up Google Calendar access
-7. **Sync**: `calsinki sync` or `calsinki sync <pair_id>` to start calendar synchronization
+7. **Sync**: `calsinki sync` or `calsinki sync <rule_id>` to start calendar synchronization
 
 ## 🎮 Command Reference
 
@@ -56,16 +59,16 @@ calsinki config --example        # Show example configuration
 
 ### Synchronization
 ```bash
-calsinki sync                    # Sync all enabled sync pairs
+calsinki sync                    # Sync all enabled sync rules
 calsinki sync --dry-run          # Preview sync without making changes
-calsinki sync demo_to_personal   # Sync specific sync pair
-calsinki sync --list             # List available sync pairs
+calsinki sync demo_to_personal   # Sync specific sync rule
+calsinki sync --list             # List available sync rules
 ```
 
 ### Event Management
 ```bash
-calsinki purge demo_to_personal  # Remove events from specific sync pair
-calsinki purge --all             # Remove all synced events from all pairs
+calsinki purge demo_to_personal  # Remove events from specific sync rule
+calsinki purge --all             # Remove all synced events from all rules
 calsinki purge --dry-run         # Show what would be purged
 ```
 
@@ -98,6 +101,37 @@ If you have custom XDG paths set (e.g., `XDG_CONFIG_HOME=~/.config`), Calsinki w
 - **OAuth2 credentials** and **API keys** are stored in `$XDG_DATA_HOME` (never commit)
 - **Sync metadata** is stored in destination events (Google Calendar handles privacy)
 - **No sensitive data** is logged or transmitted beyond Google's secure APIs
+
+## 🏗️ Configuration Structure
+
+Calsinki uses a modern, nested configuration structure that makes calendar management intuitive and maintainable:
+
+### Account-Based Organization
+- **Accounts**: Each Google account (work, personal, etc.) is defined separately
+- **Nested Calendars**: Calendars belong to their respective accounts
+- **Unique Labels**: Each calendar has a human-readable label within its account
+
+### Label-Based References
+Instead of using long calendar IDs, Calsinki uses a simple `account.label` format:
+- `work.primary` - The primary calendar in your work account
+- `personal.family` - A family calendar in your personal account
+- `xteam.team` - A team calendar in your xteam account
+
+This makes your configuration much more readable and maintainable!
+
+### Example Structure
+```yaml
+accounts:
+  - name: "work"
+    calendars:
+      - label: "primary"          # Referenced as "work.primary"
+      - label: "team"             # Referenced as "work.team"
+  
+  - name: "personal"
+    calendars:
+      - label: "primary"          # Referenced as "personal.primary"
+      - label: "family"           # Referenced as "personal.family"
+```
 
 ## 🎨 Event Customization
 
@@ -150,11 +184,32 @@ This ensures safe bi-directional synchronization without manual intervention.
 
 ### Example Configuration
 ```yaml
+# Google Calendar accounts with nested calendars
+accounts:
+  - name: "work"
+    email: "work@company.com"
+    auth_type: "oauth2"
+    calendars:
+      - label: "primary"
+        calendar_id: "work@company.com"
+        name: "Work Calendar"
+        description: "Primary work calendar"
+
+  - name: "personal"
+    email: "personal@gmail.com"
+    auth_type: "oauth2"
+    calendars:
+      - label: "primary"
+        calendar_id: "personal@gmail.com"
+        name: "Personal Calendar"
+        description: "Primary personal calendar"
+
+# Sync rules using calendar labels
 sync_rules:
   - id: "work_to_personal"
-    source_calendar: "work@company.com"
+    source_calendar: "work.primary"
     destination:
-      - calendar_id: "personal@gmail.com"
+      - calendar: "personal.primary"
         privacy_mode: "private"
         title_prefix: "[WORK]"
         title_suffix: "(synced)"
@@ -165,13 +220,14 @@ sync_rules:
 ## 🏗️ Architecture
 
 Calsinki is built as a Python command-line tool that:
-1. Reads configuration from a simple YAML file
+1. Reads configuration from a nested YAML structure with accounts and calendars
 2. Authenticates with Google Calendar APIs using OAuth2 device flow
-3. Syncs events between source and destination calendars with privacy controls
+3. Syncs events from source calendars to multiple destination calendars using sync rules
 4. Maintains sync metadata for reliable updates and duplicate prevention
 5. Automatically handles event lifecycle (creation, updates, deletion)
 6. Provides safe preview modes for all operations
 7. Runs automatically on your schedule
+8. Uses label-based references for human-readable calendar identification
 
 ## 🛠️ Tech Stack
 
@@ -202,6 +258,10 @@ Calsinki is built as a Python command-line tool that:
 - [x] Custom event title prefixes/suffixes per sync target
 - [x] Destination event color customization per sync target
 - [x] Sync timestamps and metadata tracking
+- [x] Sync rules system (replacing sync pairs)
+- [x] Nested calendar structure under accounts
+- [x] Label-based calendar references (`account.label`)
+- [x] One-to-many synchronization (one source, multiple destinations)
 
 ## 🤝 Contributing
 
